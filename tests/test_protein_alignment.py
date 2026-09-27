@@ -283,8 +283,12 @@ class ShortNucleotideAlignmentTests(unittest.TestCase):
         )
 
     def test_bounded_api_keeps_internal_dp_limit(self):
-        with self.assertRaisesRegex(AlignmentBackendError, "narrow the anchor-bounded interval"):
+        with self.assertRaises(AlignmentBackendError) as caught:
             anchored_short_alignment("A" * 501, "A" * 501, mode="global")
+        message = str(caught.exception)
+        self.assertIn("cells=251001", message)
+        self.assertIn("budget=250000", message)
+        self.assertIn("complete alignment was rejected without truncating DP states", message)
 
 
 if __name__ == "__main__":

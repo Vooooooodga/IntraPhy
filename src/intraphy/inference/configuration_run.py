@@ -4,7 +4,6 @@ from collections import defaultdict
 from dataclasses import asdict, replace
 import json
 from pathlib import Path
-from collections import defaultdict
 import shutil
 import tempfile
 import numpy as np
@@ -16,11 +15,11 @@ from ..structure import MODEL_VERSION
 from ..structure.space import enumerate_space
 from ..structure.validation import validate_collection
 from ..structure.tree_context import canonical_tree, tree_rows as normalized_rows
-from ..structure.observations import observation_scenarios
+from ..structure.observations import observation_scenarios, observation_scenario_count
 from ..structure.serialization import read_catalogues, write_catalogues, write_json, json_safe
 from ..structure.prepare import prepare_configurations
 from ..structure.edits import EDIT_KINDS
-from .configuration_history import reconstruct
+from .configuration_history import ReconstructionWorkspace
 from .configuration_model import RateModel, evaluate_model
 
 
@@ -69,10 +68,14 @@ def _table(directory, name, rows, first):
 
 
 def infer_configurations(input_dir, output_dir, *, model="exon-parsimony", configurations=None,
-                         rates=None, observation_view="evidence", max_states=1024, max_origins=256,
-                         max_observation_scenarios=64, branch_length_mode="supplied", expected_edits=False,
+                         rates=None, observation_view="evidence", max_states=None, max_origins=None,
+                         max_observation_scenarios=None, branch_length_mode="supplied", expected_edits=False,
                          alignment_timeout=600, max_locus_bases=100000,
                          exon_identity=.7, anchor_bases=12, anchor_identity=.8, origin_root_sensitivity=()):
+    if (max_observation_scenarios is not None and
+            (not isinstance(max_observation_scenarios, int) or isinstance(max_observation_scenarios, bool)
+             or max_observation_scenarios <= 0)):
+        raise ValueError("max_observation_scenarios must be a positive integer or None")
     if any(not np.isfinite(w) or w <= 0 for w in origin_root_sensitivity):
         raise ValueError("Origin sensitivity weights must be finite and positive")
     if origin_root_sensitivity and model != "exon-ctmc":
@@ -127,34 +130,70 @@ def infer_configurations(input_dir, output_dir, *, model="exon-parsimony", confi
                     state_space_scope="closed_declared_candidate_catalogue_not_all_possible_historical_exons",
                     state_space_reason=space.reason, state_limit=max_states, state_space_estimate=space.diagnostics)
         detail = {**prefix, "catalogue": asdict(c), "states": _state_rows(space), "views": {}}
+        theoretical_scenarios = observation_scenario_count(space, taxa)
+        info["observation_scenarios"] = {
+            view: {"theoretical_count": theoretical_scenarios, "evaluated_count": 0,
+                   "resolved_count": 0, "unresolved_count": 0, "limit": max_observation_scenarios,
+                   "status": "not_attempted", "scope": "exact_declared_cartesian_coexisting_scenarios"}
+            for view in ("evidence", "annotation")}
         if c.status != "qualified" or not space.complete:
             info["inference_status"] = "unresolved" if c.status != "qualified" else "state_space_incomplete"
             info["probability_status"] = "not_available"
-            summary.append({**prefix, "status": info["inference_status"], "minimum_structural_edits": None})
+            selected_counts = info["observation_scenarios"][observation_view]
+            summary.append({**prefix, "status": info["inference_status"], "minimum_structural_edits": None,
+                "observation_view": observation_view,
+                "observation_scenario_theoretical_count": selected_counts["theoretical_count"],
+                "observation_scenario_evaluated_count": selected_counts["evaluated_count"],
+                "observation_scenario_resolved_count": selected_counts["resolved_count"],
+                "observation_scenario_unresolved_count": selected_counts["unresolved_count"],
+                "observation_scenario_limit": selected_counts["limit"],
+                "observation_scenario_status": selected_counts["status"],
+                "observation_scenario_scope": selected_counts["scope"]})
             diagnostic_units.append(info)
             detailed.append(detail)
             continue
         views = {}
+        reconstruction_workspace = ReconstructionWorkspace(space, tree)
         try:
             for view in ("evidence", "annotation"):
                 scenarios = observation_scenarios(space, taxa, view, max_observation_scenarios)
+                info["observation_scenarios"][view]["status"] = "processing"
                 histories = []
                 for label, tips in scenarios:
                     informative = sum(not np.all(v == v[0]) for v in tips.values())
                     if informative < 2:
                         histories.append({"status": "insufficient_observed_taxa", "minimum_cost": None,
-                                          "minimum_structural_edits": None, "events": [], "witness": []})
+                                          "minimum_structural_edits": None, "events": [], "witness": [],
+                                          "observation_scenario": label})
                     else:
-                        result = reconstruct(space, tree, tips, max_origins=max_origins, normalize_tree=False)
+                        result = reconstruction_workspace.reconstruct(tips, max_origins=max_origins)
                         result["observation_scenario"] = label
                         histories.append(result)
+                    if histories[-1].get("minimum_structural_edits") is None:
+                        info["observation_scenarios"][view]["unresolved_count"] += 1
+                    else:
+                        info["observation_scenarios"][view]["resolved_count"] += 1
+                    info["observation_scenarios"][view]["evaluated_count"] += 1
+                info["observation_scenarios"][view]["status"] = "complete"
                 views[view] = {"histories": histories, "events": _robust_events(histories)}
+                info["observation_scenarios"][view]["workspace"] = reconstruction_workspace.diagnostics()
         except ValueError as exc:
             if "incomplete" not in str(exc):
                 raise
+            info["observation_scenarios"][view]["status"] = "blocked"
+            info["observation_scenarios"][view]["workspace"] = reconstruction_workspace.diagnostics()
             info["inference_status"] = str(exc)
             info["probability_status"] = "not_available"
-            summary.append({**prefix, "status": str(exc), "minimum_structural_edits": None})
+            selected_counts = info["observation_scenarios"][observation_view]
+            summary.append({**prefix, "status": str(exc), "minimum_structural_edits": None,
+                "observation_view": observation_view,
+                "observation_scenario_theoretical_count": selected_counts["theoretical_count"],
+                "observation_scenario_evaluated_count": selected_counts["evaluated_count"],
+                "observation_scenario_resolved_count": selected_counts["resolved_count"],
+                "observation_scenario_unresolved_count": selected_counts["unresolved_count"],
+                "observation_scenario_limit": selected_counts["limit"],
+                "observation_scenario_status": selected_counts["status"],
+                "observation_scenario_scope": selected_counts["scope"]})
             diagnostic_units.append(info)
             detailed.append(detail)
             continue
@@ -171,6 +210,13 @@ def infer_configurations(input_dir, output_dir, *, model="exon-parsimony", confi
         info["annotation_sensitivity"] = (annotation_values != evidence_values or
             event_signature("annotation") != event_signature("evidence"))
         summary.append({**prefix, "status": info["inference_status"], "observation_view": observation_view,
+            "observation_scenario_theoretical_count": info["observation_scenarios"][observation_view]["theoretical_count"],
+            "observation_scenario_evaluated_count": info["observation_scenarios"][observation_view]["evaluated_count"],
+            "observation_scenario_resolved_count": info["observation_scenarios"][observation_view]["resolved_count"],
+            "observation_scenario_unresolved_count": info["observation_scenarios"][observation_view]["unresolved_count"],
+            "observation_scenario_limit": info["observation_scenarios"][observation_view]["limit"],
+            "observation_scenario_status": "complete",
+            "observation_scenario_scope": info["observation_scenarios"][observation_view]["scope"],
             "minimum_structural_edits": min(valid_values) if valid_values else None,
             "maximum_conditional_minimum": max(valid_values) if valid_values else None,
             "required_edit_placements": sum(e["support"] == "required" for e in chosen["events"]),

@@ -24,6 +24,22 @@ from .workflow import run_all, _record_evidence_aligner
 
 
 def _dispatch(args):
+    if args.command in {"locus-statistics", "prepare-locus-evidence"}:
+        from .commands.locus_statistics import (
+            dispatch_locus_statistics, dispatch_prepare_locus_evidence,
+        )
+        if args.command == "locus-statistics":
+            dispatch_locus_statistics(args)
+        else:
+            dispatch_prepare_locus_evidence(args)
+        return
+    if args.command in {"infer-exon-repertoires", "fit-exon-repertoire-rates"}:
+        from .inference.repertoire_run import infer_repertoires, fit_repertoire_rates
+        if args.command == "infer-exon-repertoires":
+            infer_repertoires(args._repertoire_bundle, args.output_dir, expected_edits=args.expected_edits)
+        else:
+            fit_repertoire_rates(args._repertoire_bundle, args.output_dir, log_scale_bounds=args.log_scale_bounds, collection_provenance=args.collection_provenance)
+        return
     if args.command == "realign-exons":
         from .aligners.cesar_adapter import realign
         realign(args)
@@ -31,8 +47,12 @@ def _dispatch(args):
         from .commands.exon_statistics import fit_command
         fit_command(args)
     elif args.command == "analyze":
-        from .commands.exons import dispatch_analyze
-        dispatch_analyze(args)
+        if args.model == "exon-locus-ctmc":
+            from .commands.locus import dispatch_locus
+            dispatch_locus(args)
+        else:
+            from .commands.exons import dispatch_analyze
+            dispatch_analyze(args)
     elif args.command == "example-exons":
         from .verification.exon_cases import write_exon_example
         write_exon_example(args.output_dir, args.scenario, args.seed)
@@ -46,6 +66,9 @@ def _dispatch(args):
             raise ValueError("Rate output already exists")
         write_json(args.output, {"schema": "intraphy.exon-rates/1", "rates": {k: args.rate for k in EDIT_KINDS},
                                "provenance": "user-requested illustrative fixed rates; not fitted biological estimates"})
+    elif args.command in {"run", "infer-phylogeny"} and args.model == "exon-locus-ctmc":
+        from .commands.locus import dispatch_locus
+        dispatch_locus(args)
     elif args.command in {"run", "infer-phylogeny"} and args.model.startswith("exon-"):
         from .commands.exons import configuration_arguments
         from .inference.configuration_run import infer_configurations
@@ -98,7 +121,10 @@ def _dispatch(args):
         calibrate_simulations(args.output_dir, args.scenario, args.replicates, args.bootstrap_replicates, args.stochastic_maps, args.seed)
     elif args.command == "visualize":
         from .run_result import result_model
-        if str(result_model(args.result_dir)).startswith("exon-"):
+        model_name = str(result_model(args.result_dir))
+        if model_name == "exon-locus-ctmc":
+            raise ValueError("The exon-locus-ctmc result currently provides auditable JSON posterior and event-count outputs; no locus-specific graphic renderer is available.")
+        if model_name.startswith("exon-"):
             from .reporting.exon_results import render_exon_results
             render_exon_results(args.result_dir, args.output_dir)
             return

@@ -11,7 +11,9 @@ import numpy as np
 from .space import StateSpace
 
 
-def origin_scenarios(space: StateSpace, tree, maximum: int = 256, *, tips=None, root_weight: float = 1.):
+def origin_scenarios(space: StateSpace, tree, maximum: int | None = None, *, tips=None, root_weight: float = 1.):
+    if maximum is not None and (type(maximum) is not int or maximum < 1):
+        raise ValueError("maximum must be a positive integer or None")
     if not math.isfinite(root_weight) or root_weight <= 0:
         raise ValueError("Root opportunity weight must be finite and positive")
     candidates = []
@@ -35,7 +37,7 @@ def origin_scenarios(space: StateSpace, tree, maximum: int = 256, *, tips=None, 
                 eligible.append(node)
         candidates.append(tuple(eligible))
     n = math.prod(map(len, candidates))
-    if n > maximum:
+    if maximum is not None and n > maximum:
         raise ValueError("origin_scenarios_incomplete: increase the explicit scenario limit")
     # Weights are declared before observations. Removed impossible opportunities
     # keep their prior mass; weights are not renormalized after seeing retention.

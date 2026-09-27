@@ -13,6 +13,7 @@ from intraphy.mapping.candidate_codec import _format_genomic_blocks
 from intraphy.mapping.candidate_codec import _genomic_blocks0
 from intraphy.mapping.candidate_codec import _public_candidate_record
 from intraphy.mapping.candidate_codec import _public_interval
+from intraphy.mapping.candidate_records import _scope_candidate_record_ids
 from intraphy.mapping.policies import occurrence_copy_key
 import json
 
@@ -197,9 +198,7 @@ def _candidate_records_for_match(evidence, match_id):
                 "accepted": int(bool(evidence.get("candidate_accepted", True))),
             }
         )
-    for index, record in enumerate(records, start=1):
-        if record.get("candidate_id") in {None, "", "NA"}:
-            record["candidate_id"] = f"{match_id}.candidate_{index:03d}"
+    _scope_candidate_record_ids(records, match_id, "candidate")
     return records
 
 
@@ -222,9 +221,7 @@ def _match_row(left, right, evidence, score, threshold, distance_class, status, 
         dict(record)
         for record in evidence.get("dna_candidate_assessments", evidence.get("candidate_records", ()))
     ]
-    for index, record in enumerate(dna_candidate_records, start=1):
-        if record.get("candidate_id") in {None, "", "NA"}:
-            record["candidate_id"] = f"{match_id}.dna_candidate_{index:03d}"
+    _scope_candidate_record_ids(dna_candidate_records, match_id, "dna_candidate")
     for record in candidate_records + dna_candidate_records:
         blocks = record.get("aligned_blocks", ())
         record.setdefault("query_genomic_blocks0", _genomic_blocks0(left, blocks, "query"))

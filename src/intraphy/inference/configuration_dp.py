@@ -8,6 +8,29 @@ from dataclasses import dataclass
 import numpy as np
 
 
+class SankoffWorkspace:
+    """Bounded reuse of inside messages for one fixed tree/state space."""
+    def __init__(self):
+        self._messages = {}
+        self.cache_hits = 0
+        self.cache_computes = 0
+
+    def message(self, node, cost, inside):
+        signature = (np.asarray(cost).shape, np.asarray(cost).dtype.str, np.asarray(cost).tobytes(),
+                     np.asarray(inside).dtype.str, np.asarray(inside).tobytes())
+        item = self._messages.get(node)
+        if item is not None and item[0] == signature:
+            self.cache_hits += 1
+            return item[1].copy()
+        self.cache_computes += 1
+        return None
+
+    def save_message(self, node, cost, inside, value):
+        signature = (np.asarray(cost).shape, np.asarray(cost).dtype.str, np.asarray(cost).tobytes(),
+                     np.asarray(inside).dtype.str, np.asarray(inside).tobytes())
+        self._messages[node] = (signature, np.asarray(value).copy())
+
+
 @dataclass(frozen=True)
 class ConfigurationParsimony:
     cost: float
@@ -17,7 +40,8 @@ class ConfigurationParsimony:
 
 
 def sankoff(tree, tips: dict[str, np.ndarray], costs: dict[str, np.ndarray],
-            root_allowed: np.ndarray | None = None, tol: float = 1e-9) -> ConfigurationParsimony:
+            root_allowed: np.ndarray | None = None, tol: float = 1e-9,
+            workspace: SankoffWorkspace | None = None) -> ConfigurationParsimony:
     if not tips:
         raise ValueError("At least one tip weight vector is required")
     n = len(next(iter(tips.values())))
@@ -30,6 +54,10 @@ def sankoff(tree, tips: dict[str, np.ndarray], costs: dict[str, np.ndarray],
         c = np.asarray(costs[child])
         if c.shape != (n, n) or np.isnan(c).any() or (c < 0).any():
             raise ValueError("Edit costs must be square, nonnegative and without NaN")
+    if workspace is not None:
+        edge_children = {child for _, child in tree.edges()}
+        workspace._messages = {child: item for child, item in workspace._messages.items()
+                               if child in edge_children}
     if root_allowed is not None and np.asarray(root_allowed).shape != (n,):
         raise ValueError("Root constraint dimension differs from state space")
     root_cost = np.zeros(n) if root_allowed is None else np.where(root_allowed, 0., np.inf)
@@ -41,7 +69,12 @@ def sankoff(tree, tips: dict[str, np.ndarray], costs: dict[str, np.ndarray],
         else:
             child_values = []
             for child in children:
-                messages[child] = np.min(costs[child] + inside[child][None, :], axis=1)
+                messages[child] = (workspace.message(child, costs[child], inside[child])
+                                   if workspace else None)
+                if messages[child] is None:
+                    messages[child] = np.min(costs[child] + inside[child][None, :], axis=1)
+                    if workspace:
+                        workspace.save_message(child, costs[child], inside[child], messages[child])
                 child_values.append(messages[child])
             inside[node] = sum(child_values, start=np.zeros(n))
             for j, child in enumerate(children):

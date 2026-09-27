@@ -1,8 +1,10 @@
 """mapping / short alignment: explicit implementation ownership."""
 from __future__ import annotations
 
+from intraphy.aligners.short import _validate_max_dp_cells
 from intraphy.aligners.short import anchored_short_alignment
 from intraphy.aligners.types import AlignmentBackendError
+from intraphy.aligners.types import MAX_INTERNAL_DP_CELLS
 from intraphy.coordinates import ClosedInterval1
 from intraphy.coordinates import CoordinateBlock
 from intraphy.coordinates import Interval0
@@ -39,7 +41,10 @@ def _rerun_anchor_bounded_short_candidates(
     seqs,
     gene_loci,
     transcript_paths=None,
+    *,
+    short_alignment_max_dp_cells=MAX_INTERNAL_DP_CELLS,
 ):
+    short_alignment_max_dp_cells = _validate_max_dp_cells(short_alignment_max_dp_cells)
     candidate_owner = {}
     candidate_record = {}
     for owner in rows:
@@ -199,6 +204,7 @@ def _rerun_anchor_bounded_short_candidates(
                 left_anchor_id=left_id,
                 right_anchor_id=right_id,
                 search_interval=search_metadata,
+                max_dp_cells=short_alignment_max_dp_cells,
             )
         except AlignmentBackendError as error:
             row["match_status"] = "candidate_unanchored"

@@ -98,10 +98,14 @@ def _top_complete_paths(candidates, candidate_indices, predecessors, terminal_in
 def _solve_context(candidates, context, start_ids, end_ids, score_delta, *, prepared=None):
     negative_infinity = float("-inf")
     if prepared is None:
+        path_by_index = [
+            _path_membership_for_context(candidate, context)
+            for candidate in candidates
+        ]
         candidate_indices = [
             index
-            for index, candidate in enumerate(candidates)
-            if context is None or _path_membership_for_context(candidate, context) is not None
+            for index in range(len(candidates))
+            if context is None or path_by_index[index] is not None
         ]
         if start_ids and not any(candidates[index].candidate_id in start_ids for index in candidate_indices):
             return None
@@ -112,10 +116,10 @@ def _solve_context(candidates, context, start_ids, end_ids, score_delta, *, prep
         successors = {index: [] for index in candidate_indices}
         for offset, left_index in enumerate(candidate_indices):
             left = candidates[left_index]
-            left_path = _path_membership_for_context(left, context)
+            left_path = path_by_index[left_index]
             for right_index in candidate_indices[offset + 1 :]:
                 right = candidates[right_index]
-                right_path = _path_membership_for_context(right, context)
+                right_path = path_by_index[right_index]
                 if _ordered_before(left, right, left_path, right_path):
                     predecessors[right_index].append(left_index)
                     successors[left_index].append(right_index)

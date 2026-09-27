@@ -1,9 +1,35 @@
 cff-version: 1.2.0
-title: "IntraPhy: phylogenetic reconstruction of exon configurations"
-message: "If you use IntraPhy, please cite the repository and the associated paper when available."
+title: "IntraPhy: phylogenetic inference of exon-copy and splice-feature evolution"
+message: "If you use IntraPhy, cite the software release and methods references relevant to your analysis."
 type: software
-version: 0.19.1
+version: 0.20.0
 authors:
   - name: "IntraPhy contributors"
-date-released: 2026-09-21
+date-released: 2026-09-27
 repository-code: "https://github.com/Vooooooodga/IntraPhy"
+references:
+  - type: article
+    title: "HyPhy 2.5—A Customizable Platform for Evolutionary Hypothesis Testing Using Phylogenies"
+    journal: "Molecular Biology and Evolution"
+    year: 2020
+    volume: 37
+    start: 295
+    end: 299
+    doi: 10.1093/molbev/msz197
+  - type: article
+    authors:
+      - family-names: Lee
+        given-names: Christopher
+      - family-names: Kim
+        given-names: Namshin
+      - family-names: Roy
+        given-names: Meenakshi
+      - family-names: Graveley
+        given-names: Brenton R.
+    title: "Massive expansions of Dscam splicing diversity via staggered homologous recombination during arthropod evolution"
+    journal: RNA
+    year: 2010
+    volume: 16
+    start: 91
+    end: 105
+    doi: 10.1261/rna.1812710

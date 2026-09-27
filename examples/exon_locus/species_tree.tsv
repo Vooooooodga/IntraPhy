@@ -1,0 +1,4 @@
+node_id	parent_id	label	branch_length
+root		root	
+species_A	root	Species_A	0.1
+species_B	root	Species_B	0.1

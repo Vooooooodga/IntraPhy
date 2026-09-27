@@ -4,14 +4,18 @@ from intraphy import __version__
 from intraphy.verification.calibration import DEFAULT_SCENARIOS
 def build_parser():
     parser = argparse.ArgumentParser(
-        prog="intraphy", description="Reconstruct exon structural changes from genomic FASTA, GFF and a rooted species tree.",
-        epilog="V19 workflow: analyze -> visualize; build-case -> run remains available. See docs/quickstart.md.",
+        prog="intraphy", description="Infer exon-copy and splice-feature histories on a rooted species tree.",
+        epilog="Primary workflow: analyze --locus-model MODEL --species-tree TREE. Genomic preparation remains available with build-case. See docs/quickstart.md.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
     from .exons import add_exon_commands, add_configuration_options
     add_exon_commands(sub)
+    from .repertoires import add_repertoire_commands
+    add_repertoire_commands(sub)
+    from .locus_statistics import add_locus_statistics_commands
+    add_locus_statistics_commands(sub)
 
     example = sub.add_parser("example", help="Write a small synthetic raw FASTA/GFF3 dataset.")
     example.add_argument("--output-dir", required=True)
@@ -225,15 +229,17 @@ def build_parser():
         cmd.add_argument("--output-dir", required=True)
     for name in ["infer-phylogeny", "run"]:
         cmd = sub.add_parser(name)
-        cmd.add_argument("--input-dir", required=True)
+        cmd.add_argument("--input-dir")
         cmd.add_argument("--output-dir", required=True)
         cmd.add_argument(
             "--analysis-scope",
             choices=["single-copy", "experimental-multicopy"],
             default="single-copy",
         )
-        cmd.add_argument("--model", choices=["exon-parsimony", "exon-ctmc", "parsimony", "er-ard", "foreground"],
-                         default="exon-parsimony", help="V19 exon configurations by default; parsimony/er-ard/foreground are explicit legacy V18 baselines.")
+        cmd.add_argument("--model", choices=["exon-locus-ctmc", "exon-parsimony", "exon-ctmc", "parsimony", "er-ard", "foreground"],
+                         default="exon-locus-ctmc", help="Explicit exon-copy CTMC by default; other model choices select their named compatibility path.")
+        from .locus import add_locus_options
+        add_locus_options(cmd)
         add_configuration_options(cmd)
         cmd.add_argument("--branch-length-mode", choices=["supplied", "unit"], default="supplied")
         cmd.add_argument(

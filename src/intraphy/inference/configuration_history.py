@@ -1,30 +1,74 @@
 """All optimal origin/structure histories and non-additive elementary edits."""
 from __future__ import annotations
 from collections import defaultdict
+from types import MappingProxyType
 import math
 import numpy as np
 
 from ..structure.space import StateSpace
 from ..structure.origins import origin_scenarios
 from ..structure.paths import make_graph
-from .configuration_dp import sankoff
+from .configuration_dp import sankoff, SankoffWorkspace
 from ..structure.tree_context import canonical_tree
 
 
-def reconstruct(space: StateSpace, tree, tips, *, max_origins=256, costs=None, normalize_tree=True):
+class ReconstructionWorkspace:
+    """Per-unit bounded caches for repeated observation reconstructions."""
+    def __init__(self, space, tree, costs=None):
+        self.space = space
+        self.tree = tree
+        self.costs_source = tuple(sorted((k, float(v)) for k, v in (costs or {}).items()))
+        self.costs = MappingProxyType(dict(self.costs_source)) if costs is not None else None
+        self.graphs = {}
+        self.dp = SankoffWorkspace()
+        self.graph_cache_hits = 0
+        self.graph_cache_computes = 0
+
+    def reconstruct(self, tips, *, max_origins=None):
+        return _reconstruct(self.space, self.tree, tips, max_origins=max_origins,
+                            costs=self.costs, workspace=self)
+
+    def diagnostics(self):
+        return {"graph_cache_hits": self.graph_cache_hits,
+                "graph_cache_computes": self.graph_cache_computes,
+                "message_cache_hits": self.dp.cache_hits,
+                "message_cache_computes": self.dp.cache_computes,
+                "retained_graph_entries": len(self.graphs),
+                "retained_message_entries": len(self.dp._messages)}
+
+
+def reconstruct(space: StateSpace, tree, tips, *, max_origins=None, costs=None,
+                normalize_tree=True, workspace=None):
     if normalize_tree:
         tree = canonical_tree(tree).tree
+    if workspace is None:
+        return _reconstruct(space, tree, tips, max_origins=max_origins, costs=costs,
+                            workspace=None)
+    elif (workspace.space is not space or workspace.tree is not tree or
+          workspace.costs_source != tuple(sorted((k, float(v)) for k, v in (costs or {}).items()))):
+        raise ValueError("ReconstructionWorkspace is bound to a different space, tree, or costs")
+    return _reconstruct(space, tree, tips, max_origins=max_origins, costs=costs,
+                        workspace=workspace)
+
+
+def _reconstruct(space: StateSpace, tree, tips, *, max_origins=None, costs=None,
+                 workspace=None):
     scenarios, optimum = [], math.inf
-    cache = {}
+    graph_cache = workspace.graphs if workspace else {}
     for origins, root, _ in origin_scenarios(space, tree, max_origins, tips=tips):
         # All edges without an introduction share a graph.
         graphs = {}
         for _, child in tree.edges():
             signature = tuple(sorted(k for k, v in origins.items() if v == child))
-            if signature not in cache:
-                cache[signature] = make_graph(space, origins, child, costs)
-            graphs[child] = cache[signature]
-        result = sankoff(tree, tips, {child: graph.distance for child, graph in graphs.items()}, root)
+            key = signature
+            if key not in graph_cache:
+                graph_cache[key] = make_graph(space, origins, child, costs)
+                if workspace: workspace.graph_cache_computes += 1
+            else:
+                if workspace: workspace.graph_cache_hits += 1
+            graphs[child] = graph_cache[key]
+        result = sankoff(tree, tips, {child: graph.distance for child, graph in graphs.items()}, root,
+                         workspace=workspace.dp if workspace else None)
         if result.cost < optimum-1e-9:
             optimum, scenarios = result.cost, []
         if math.isfinite(result.cost) and abs(result.cost-optimum) <= 1e-9:

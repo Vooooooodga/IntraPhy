@@ -19,7 +19,7 @@ class StateSpace:
     edits: tuple[ElementaryEdit, ...]
     complete: bool
     reason: str
-    limit: int
+    limit: int | None
     diagnostics: dict = field(default_factory=dict, compare=False)
 
     @cached_property
@@ -32,7 +32,7 @@ class StateSpace:
         return tuple((index[e.source], index[e.target], e) for e in self.edits)
 
 
-def close_span_catalogue(c: Catalogue, max_spans: int = 80) -> Catalogue:
+def close_span_catalogue(c: Catalogue, max_spans: int | None = None) -> Catalogue:
     """Close *coordinates*, not an unconstrained universe of arbitrary sequence.
 
     Include fused and shifted ancestral intermediates and material-trimmed ends.
@@ -48,7 +48,9 @@ def close_span_catalogue(c: Catalogue, max_spans: int = 80) -> Catalogue:
         starts.add(m.end)
         ends.add(m.start)
     spans = tuple(ExonSpan(a, b) for a in sorted(starts) for b in sorted(ends) if a < b)
-    if len(spans) > max_spans:
+    if max_spans is not None and (type(max_spans) is not int or max_spans < 1):
+        raise ValueError("max_spans must be a positive integer or None")
+    if max_spans is not None and len(spans) > max_spans:
         raise ValueError("state_space_incomplete: exon-boundary catalogue exceeds max_spans")
     return replace(c, spans=spans, boundary_candidates=c.boundary_candidates or c.spans)
 
@@ -64,24 +66,22 @@ def estimate_geometry_count(spans):
     return counts[0]
 
 
-def enumerate_space(catalogue: Catalogue, max_states: int = 1024) -> StateSpace:
-    if type(max_states) is not int or max_states < 1:
-        raise ValueError("max_states must be a positive integer")
+def enumerate_space(catalogue: Catalogue, max_states: int | None = None, *, max_spans: int | None = None) -> StateSpace:
+    if max_states is not None and (type(max_states) is not int or max_states < 1):
+        raise ValueError("max_states must be a positive integer or None")
     diagnostics = {"state_limit": max_states, "finite_declared_catalogue_only": True}
     def failure(c, reason):
         return StateSpace(c, (), (), False, reason, max_states, diagnostics)
     try:
-        c = close_span_catalogue(catalogue)
+        c = close_span_catalogue(catalogue, max_spans)
     except ValueError as exc:
         return failure(catalogue, str(exc))
     geometries_count = estimate_geometry_count(c.spans)
     diagnostics.update(candidate_span_count=len(c.spans),
         geometry_count_exact=geometries_count, material_combinations=3**len(c.material),
         state_count_upper_bound=geometries_count*3**len(c.material),
-        dense_matrix_bytes_at_limit=8*max_states**2)
-    if len(c.material) > 6:
-        return failure(c, "state_space_incomplete: too many variable material tracts")
-    if geometries_count > max_states:
+        dense_matrix_bytes_at_limit=None if max_states is None else 8*max_states**2)
+    if max_states is not None and geometries_count > max_states:
         return failure(c, "state_space_incomplete: exact geometry count exceeds state limit")
     geometries = []
     # Complete enumeration, accelerated by the preflight count and sorted starts.
@@ -100,7 +100,7 @@ def enumerate_space(catalogue: Catalogue, max_states: int = 1024) -> StateSpace:
             if not set(normalized) <= span_set:
                 return failure(c, "state_space_incomplete: unrepresented material boundary")
             states.add(ExonConfiguration(normalized, tuple(material)))
-            if len(states) > max_states:
+            if max_states is not None and len(states) > max_states:
                 return failure(c, "state_space_incomplete: material/configuration state limit")
     ordered = tuple(sorted(states))
     edits = tuple(e for state in ordered for e in elementary_edits(c, state))

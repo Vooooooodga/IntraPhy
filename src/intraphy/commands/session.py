@@ -11,8 +11,11 @@ from .preflight import preflight
 
 GUARDED_COMMANDS = {"build-case", "run", "infer-phylogeny", "visualize", "import-orthofinder",
                     "extract-loci", "normalize-annotation", "explain", "analyze", "fit-exon-rates", "realign-exons"}
+GUARDED_COMMANDS.update({"infer-exon-repertoires", "fit-exon-repertoire-rates"})
+GUARDED_COMMANDS.update({"locus-statistics", "prepare-locus-evidence"})
 OWNERS = {"execution.json", "run_result.json", "case_build_report.tsv", "case_provenance.tsv",
-          "visualization_manifest.tsv", "target_manifest.tsv", "figure_manifest.json"}
+          "visualization_manifest.tsv", "target_manifest.tsv", "figure_manifest.json",
+          "locus_history.json", "locus_fit.json", "locus_statistics.json", "locus_model.json"}
 
 
 def _write_json(path, data):
@@ -28,8 +31,8 @@ def reserve_output(args):
     target = path.resolve()
     if target in {Path('/'), Path.home(), Path.cwd()}:
         raise ValueError("Use a dedicated output directory, not the filesystem root, home or working directory")
-    for field in ("input_dir", "result_dir", "structural_site_matrix", "manifest", "species_tree",
-                  "fasta", "gff", "orthologs", "config", "exon_configurations", "exon_rates", "profile_dir", "codon_matrix"):
+    for field in ("input_dir", "result_dir", "structural_site_matrix", "manifest", "species_tree", "locus_model", "evidence_json",
+                  "fasta", "gff", "orthologs", "config", "exon_configurations", "exon_rates", "repertoire_model", "profile_dir", "codon_matrix"):
         value = getattr(args, field, None)
         paths = value if isinstance(value, (list, tuple)) else [value]
         if any(item and Path(item).resolve().is_relative_to(target) for item in paths):

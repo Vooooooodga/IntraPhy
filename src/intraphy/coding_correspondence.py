@@ -1,21 +1,14 @@
 """coding_correspondence: extracted responsibilities; see docs/architecture.md."""
 from __future__ import annotations
 
-from collections import OrderedDict
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from intraphy.preparation.features import FeatureHierarchy
 from intraphy import alignment
 from intraphy.coding.projection import _aligned_occurrence_pairs
-from intraphy.coding.projection import _anchor_metrics
-from intraphy.coding.projection import _candidate_json
-from intraphy.coding.projection import _coordinate_blocks0
 from intraphy.coding.transcripts import _copy_key
 from intraphy.coding.transcripts import build_coding_transcript
-from intraphy.coding.types import CodingProjectionCandidate
-from intraphy.coding.types import CodingProjectionCandidateSet
 from intraphy.coding.types import CodingResidueProjection
 from intraphy.coding.types import FamilyCodingProjection
-import json
 
 
 class CodingProjectionIndex:
@@ -101,28 +94,70 @@ class CodingProjectionIndex:
         self.family_alignments[family_id] = projection
         return projection
 
-    def _pair(self, query_key, target_key):
+    def use_family_projection(self, projection):
+        """Install a strictly validated full-family MSA for this two-copy index."""
+        if not isinstance(projection, FamilyCodingProjection):
+            raise TypeError("FamilyCodingProjection required")
+        if projection.mode != self.msa_mode:
+            raise ValueError("family MSA mode does not match coding index")
+        if any(key[0] != projection.family_id for key in projection.record_by_transcript):
+            raise ValueError("family MSA contains an alias from another family")
+        for key, transcript in self.transcripts.items():
+            if key[0] != projection.family_id or transcript.unavailable_reason or not transcript.protein:
+                continue
+            record_id = projection.record_by_transcript.get(key)
+            if record_id is None:
+                raise ValueError(f"family MSA lacks usable transcript alias {key}")
+            aligned = projection.aligned_for(key)
+            if aligned.replace("-", "") != transcript.protein:
+                raise ValueError(f"family MSA residues disagree with transcript {key}")
+            columns = tuple(i for i, aa in enumerate(aligned) if aa != "-")
+            if projection.columns_for(key) != columns:
+                raise ValueError(f"family MSA residue columns disagree with transcript {key}")
+        previous = self.family_alignments.get(projection.family_id)
+        if previous is not projection:
+            for key in tuple(self.cache):
+                if key[0][0] == projection.family_id:
+                    _pairs, _columns, _left, _right, size = self.cache.pop(key)
+                    self.cached_bases -= size
+        self.family_alignments[projection.family_id] = projection
+        return projection
+
+    def _canonical_pair_projection(self, query_key, target_key, family_projection=None, *, cache=True):
+        """Return one canonical projection, optionally participating in the legacy LRU."""
         key = tuple(sorted((query_key, target_key)))
-        if key in self.cache:
+        if not cache and key in self.cache:
+            _pairs, _columns, _left, _right, old_size = self.cache.pop(key)
+            self.cached_bases -= old_size
+        if cache and key in self.cache:
             self.cache.move_to_end(key)
             pairs, known_columns, aligned_left, aligned_right, _size = self.cache[key]
         else:
-            query, target = (self.transcripts[item] for item in key)
-            if query.key[0] != target.key[0]:
-                return {}, (), "", "", False
-            family = self._family_alignment(query.key[0])
-            aligned_left = family.aligned_for(query.key)
-            aligned_right = family.aligned_for(target.key)
+            left, right = (self.transcripts[item] for item in key)
+            if left.key[0] != right.key[0]:
+                return key, {}, (), "", ""
+            family = family_projection or self._family_alignment(left.key[0])
+            if family_projection is not None and self.family_alignments.get(left.key[0]) is not family_projection:
+                self.use_family_projection(family_projection)
+            aligned_left = family.aligned_for(left.key)
+            aligned_right = family.aligned_for(right.key)
             pairs, known_columns = _aligned_occurrence_pairs(
-                query, target, aligned_left, aligned_right,
+                left, right, aligned_left, aligned_right,
             )
             size = sum(len(record["positions0"]) for record in pairs.values())
-            if size <= self.MAX_CACHED_BASE_PAIRS:
-                while self.cache and (len(self.cache) >= self.MAX_CACHED_PAIRS or self.cached_bases + size > self.MAX_CACHED_BASE_PAIRS):
+            if cache and size <= self.MAX_CACHED_BASE_PAIRS:
+                while self.cache and (len(self.cache) >= self.MAX_CACHED_PAIRS or
+                                      self.cached_bases + size > self.MAX_CACHED_BASE_PAIRS):
                     _old_key, (_old_pairs, _old_columns, _left, _right, old_size) = self.cache.popitem(last=False)
                     self.cached_bases -= old_size
                 self.cache[key] = (pairs, known_columns, aligned_left, aligned_right, size)
                 self.cached_bases += size
+        return key, pairs, known_columns, aligned_left, aligned_right
+
+    def _pair(self, query_key, target_key):
+        key, pairs, known_columns, aligned_left, aligned_right = self._canonical_pair_projection(query_key, target_key)
+        if not aligned_left and not aligned_right:
+            return {}, (), "", "", False
         inverted = query_key != key[0]
         if not inverted:
             return pairs, known_columns, aligned_left, aligned_right, False
@@ -226,157 +261,17 @@ class CodingProjectionIndex:
         return tuple(sorted(competitors))
 
     def evidence(self, query_occurrence, target_occurrence):
-        query_keys = self.by_occurrence.get(query_occurrence, [])
-        target_keys = self.by_occurrence.get(target_occurrence, [])
-        result = {
-            "protein_status": "unavailable",
-            "protein_mapping_status": "uncovered",
-            "protein_unavailable_reason": "no_CDS_transcript_path",
-            "protein_membership_eligible": False,
-            "protein_position_eligible": False,
-            "protein_hard_observation_eligible": False,
-            "protein_candidate_evidence_available": False,
-        }
-        unavailable, candidates = set(), []
-        for query_key in query_keys:
-            query = self.transcripts[query_key]
-            for target_key in target_keys:
-                target = self.transcripts[target_key]
-                for side, transcript in (("query", query), ("target", target)):
-                    if transcript.unavailable_reason:
-                        unavailable.add(f"{side}:{transcript.key[-1]}:{transcript.unavailable_reason}")
-                if query.unavailable_reason or target.unavailable_reason:
-                    continue
-                if not query.coding_lengths.get(query_occurrence) or not target.coding_lengths.get(target_occurrence):
-                    unavailable.add("no_CDS_in_requested_occurrence")
-                    continue
-                result["protein_status"] = "no_aligned_CDS"
-                pairs, known_columns, aligned_query, aligned_target, _inverted = self._pair(
-                    query_key, target_key,
-                )
-                record = pairs.get((query_occurrence, target_occurrence))
-                if not record:
-                    continue
-                positions = set(record["positions0"])
-                identity = record["aa_matches"] / record["aa_pairs"]
-                query_coverage = len(positions) / query.coding_lengths[query_occurrence]
-                target_coverage = len(positions) / target.coding_lengths[target_occurrence]
-                anchors = _anchor_metrics(
-                    record, known_columns, aligned_query, aligned_target,
-                    query_occurrence, target_occurrence,
-                )
-                ordered = sorted(positions)
-                position_monotonic = all(
-                    right[0] > left[0] and right[1] > left[1]
-                    for left, right in zip(ordered, ordered[1:])
-                )
-                query_positions0 = {query0 for query0, _target0 in positions}
-                target_positions0 = {target0 for _query0, target0 in positions}
-                candidates.append(CodingProjectionCandidate(
-                    query_transcript_key=query_key,
-                    target_transcript_key=target_key,
-                    coordinate_blocks=_coordinate_blocks0(positions),
-                    aa_identity=identity,
-                    query_cds_coverage=query_coverage,
-                    target_cds_coverage=target_coverage,
-                    known_aa_pairs=record["aa_pairs"],
-                    blosum62_score=record["blosum62_score"],
-                    gap_fraction=anchors["gap_fraction"],
-                    left_anchor_pairs=anchors["left_pairs"],
-                    right_anchor_pairs=anchors["right_pairs"],
-                    left_anchor_score=anchors["left_score"],
-                    right_anchor_score=anchors["right_score"],
-                    left_anchor_supported=anchors["left_supported"],
-                    right_anchor_supported=anchors["right_supported"],
-                    terminal_side=anchors["terminal_side"],
-                    msa_column_interval=anchors["column_interval"],
-                    anchor_resolved=anchors["resolved"],
-                    position_monotonic=position_monotonic,
-                    competing_occurrences=self._competing_occurrences(
-                        query_key, target_key, query_occurrence, target_occurrence,
-                        query_positions0, target_positions0,
-                    ),
-                ))
-        result["protein_unavailable_reason"] = ";".join(sorted(unavailable)) or ("NA" if candidates or result["protein_status"] != "unavailable" else "no_CDS_transcript_path")
-        if not candidates:
-            return result
-        candidates = tuple(sorted(
-            candidates,
-            key=lambda candidate: (
-                candidate.query_transcript_key, candidate.target_transcript_key,
-                candidate.coordinate_blocks,
-            ),
-        ))
-        candidate_set = CodingProjectionCandidateSet(candidates)
-        best = max(candidates, key=lambda candidate: (
-            candidate.position_eligible, candidate.anchor_resolved,
-            candidate.known_aa_pairs, candidate.blosum62_score,
-            candidate.aa_identity,
-            max(candidate.query_cds_coverage, candidate.target_cds_coverage),
-        ))
-        ambiguous = (
-            not candidate_set.coordinate_consensus
-            or bool(candidate_set.competing_occurrences)
-            or any(not candidate.position_monotonic for candidate in candidates)
+        from intraphy.coding.projection_evidence import evidence
+        return evidence(self, query_occurrence, target_occurrence)
+
+    def evidence_for_copy_pair(self, query_copy_key, target_copy_key, family_projection=None,
+                               *, work_db_path):
+        from intraphy.coding.copy_pair_projection import evidence_for_copy_pair
+        return evidence_for_copy_pair(
+            self, query_copy_key, target_copy_key, family_projection,
+            work_db_path=work_db_path,
         )
-        mapping_status = (
-            "ambiguous_mapping" if ambiguous
-            else "resolved_local" if candidate_set.position_eligible
-            else "supported_unanchored"
-        )
-        query_sources = self.transcripts[best.query_transcript_key].source_ids
-        target_sources = self.transcripts[best.target_transcript_key].source_ids
-        interval = best.msa_column_interval
-        # ``protein_status`` remains available for the existing caller. New
-        # state construction must use mapping_status and hard eligibility.
-        result.update(
-            protein_status="ambiguous_transcript_projection" if ambiguous else "supported",
-            protein_mapping_status=mapping_status,
-            protein_membership_eligible=candidate_set.membership_eligible,
-            protein_position_eligible=candidate_set.position_eligible,
-            protein_hard_observation_eligible=candidate_set.position_eligible,
-            protein_candidate_evidence_available=candidate_set.candidate_evidence_available,
-            protein_aa_identity=best.aa_identity,
-            protein_query_cds_coverage=best.query_cds_coverage,
-            protein_target_cds_coverage=best.target_cds_coverage,
-            protein_known_aa_pairs=best.known_aa_pairs,
-            protein_blosum62_score=best.blosum62_score,
-            protein_gap_fraction=best.gap_fraction,
-            protein_left_anchor_pairs=best.left_anchor_pairs,
-            protein_right_anchor_pairs=best.right_anchor_pairs,
-            protein_left_anchor_score=best.left_anchor_score,
-            protein_right_anchor_score=best.right_anchor_score,
-            protein_left_anchor_supported=best.left_anchor_supported,
-            protein_right_anchor_supported=best.right_anchor_supported,
-            protein_terminal_side=best.terminal_side,
-            protein_msa_column_start0=interval.start0,
-            protein_msa_column_end0=interval.end0,
-            protein_msa_column_interval=f"{interval.start0}:{interval.end0}",
-            protein_msa_mode=self.msa_mode,
-            protein_candidate_mapping_count=len(candidates),
-            protein_candidate_coordinate_consensus=candidate_set.coordinate_consensus,
-            protein_competing_occurrences=";".join(candidate_set.competing_occurrences) or "NA",
-            protein_candidate_details=json.dumps(
-                [_candidate_json(candidate) for candidate in candidates],
-                sort_keys=True, separators=(",", ":"),
-            ),
-            protein_candidate_set=candidate_set,
-            protein_query_source_features=";".join(query_sources) or "NA",
-            protein_target_source_features=";".join(target_sources) or "NA",
-            protein_metrics_scope="best_transcript_pair",
-            protein_best_query_transcript=best.query_transcript_id,
-            protein_best_target_transcript=best.target_transcript_id,
-            protein_supporting_transcripts=";".join(
-                f"{candidate.query_transcript_id}>{candidate.target_transcript_id}"
-                for candidate in candidates
-            ),
-        )
-        if ambiguous:
-            return result
-        blocks = candidates[0].coordinate_blocks
-        result["protein_projected_coordinate_blocks"] = blocks
-        result["protein_projected_blocks"] = blocks
-        return result
+
 
 
 # Public entry points; implementations have a single owner.

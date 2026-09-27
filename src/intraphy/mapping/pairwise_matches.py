@@ -3,7 +3,9 @@ from __future__ import annotations
 
 from intraphy.aligners.pairwise import local_alignment_stats
 from intraphy.aligners.pairwise import overlap_alignment_stats
+from intraphy.aligners.short import _validate_max_dp_cells
 from intraphy.aligners.short import anchored_short_alignment
+from intraphy.aligners.types import MAX_INTERNAL_DP_CELLS
 from intraphy.aligners.types import AlignmentStats
 from intraphy.coordinates import ClosedInterval1
 from intraphy.coordinates import CoordinateBlock
@@ -27,7 +29,8 @@ from intraphy.mapping.match_context import segment_length
 from intraphy.storage.values import to_float
 
 
-def match_evidence(left, right, seqs, context, aligner="auto", threads=1, context_aligner="minimap2", short_context_max_length=300):
+def match_evidence(left, right, seqs, context, aligner="auto", threads=1, context_aligner="minimap2", short_context_max_length=300, *, short_alignment_max_dp_cells=MAX_INTERNAL_DP_CELLS):
+    short_alignment_max_dp_cells = _validate_max_dp_cells(short_alignment_max_dp_cells)
     left_seq = seqs.get(left["occurrence_id"], "")
     right_seq = seqs.get(right["occurrence_id"], "")
     exon_pair = left.get("role") in EXON_LIKE_ROLES and right.get("role") in EXON_LIKE_ROLES
@@ -71,6 +74,7 @@ def match_evidence(left, right, seqs, context, aligner="auto", threads=1, contex
             query_transcript_id=adapter_query_row.get("transcript_id"),
             target_transcript_id=adapter_target_row.get("transcript_id"),
             search_interval=bounded_interval,
+            max_dp_cells=short_alignment_max_dp_cells,
         )
         aln = candidate_set.primary
         requested_backend = "anchored_short_alignment"

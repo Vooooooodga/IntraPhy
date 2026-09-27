@@ -19,7 +19,7 @@ class AuditRawTests(unittest.TestCase):
         (raw/"truth.json").replace(root/"evaluation_truth.json")
         original={f.name:f.read_bytes() for f in raw.glob("*.gff3")}
         out=root/"result"
-        args=build_parser().parse_args(["analyze","--fasta",str(raw),"--gff",str(raw),
+        args=build_parser().parse_args(["analyze","--model","exon-parsimony","--fasta",str(raw),"--gff",str(raw),
             "--species-tree",str(raw/"species_tree.nwk"),"--output-dir",str(out),*extra])
         args._input_selection=resolve_inputs(args)
         summary=dispatch_analyze(args);data=json.loads((out/"exon_history.json").read_text())

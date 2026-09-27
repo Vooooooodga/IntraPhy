@@ -4,7 +4,7 @@ from collections import defaultdict
 from dataclasses import replace
 from pathlib import Path
 import re
-from ..storage.tabular import read_tsv
+from ..storage.tabular import iter_tsv
 from .alignment import FamilyAlignment
 
 
@@ -13,7 +13,7 @@ def check_coding_projection(alignment: FamilyAlignment, input_dir: str | Path):
     support = defaultdict(list)
     anomalies = {k: set(v) for k, v in alignment.anomalies.items()}
     records = []
-    for row in read_tsv(Path(input_dir)/"segment_matches.tsv", optional=True):
+    for row in iter_tsv(Path(input_dir)/"segment_matches.tsv", optional=True):
         qid, tid = row.get("query_occurrence_id"), row.get("subject_occurrence_id")
         if qid not in occurrences or tid not in occurrences:
             continue

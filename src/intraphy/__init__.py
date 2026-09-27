@@ -1,6 +1,3 @@
-"""IntraPhy: phylogenetic inference of intragenic structure.
+"""Phylogenetic inference of exon-copy and splice-feature histories."""
 
-The historical import namespace ``intraphy`` is retained for compatibility.
-"""
-
-__version__ = "0.19.1"
+__version__ = "0.20.0"

@@ -51,7 +51,7 @@ def result_model(result_dir):
         if data.get("status") != "completed":
             raise ValueError("cannot render an incomplete run")
         model = data.get("model")
-        if model not in {"parsimony", "er-ard", "foreground", "experimental-multicopy", "exon-parsimony", "exon-ctmc"}:
+        if model not in {"parsimony", "er-ard", "foreground", "experimental-multicopy", "exon-parsimony", "exon-ctmc", "exon-locus-ctmc"}:
             raise ValueError(f"invalid run result model: {model!r}")
         return model
     parameters = directory / "run_parameters.json"

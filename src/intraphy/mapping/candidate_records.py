@@ -10,6 +10,53 @@ from intraphy.mapping.candidate_coordinates import _covered_bases
 from intraphy.mapping.candidate_coordinates import _unknown_pair_count
 
 
+def _scope_candidate_record_ids(records, match_id, namespace):
+    """Give each record a row-unique ID while retaining backend IDs."""
+    source_ids = []
+    seen = set()
+    for record in records:
+        source_id = record.get("candidate_id")
+        if source_id in {None, "", "NA"}:
+            source_ids.append(None)
+            continue
+        source_id = str(source_id)
+        if source_id in seen:
+            raise ValueError(
+                f"ambiguous duplicate source candidate ID within {namespace} "
+                f"for {match_id}: {source_id}"
+            )
+        seen.add(source_id)
+        source_ids.append(source_id)
+
+    scoped_by_source = {
+        source_id: f"{match_id}.{namespace}.{source_id}"
+        for source_id in source_ids if source_id is not None
+    }
+    for index, (record, source_id) in enumerate(zip(records, source_ids), start=1):
+        record["source_candidate_id"] = source_id or "NA"
+        record["candidate_id"] = (
+            scoped_by_source[source_id]
+            if source_id is not None
+            else f"{match_id}.{namespace}_{index:03d}"
+        )
+        alternatives = record.get("alternative_candidate_ids")
+        if isinstance(alternatives, str):
+            if alternatives in {"", "NA"}:
+                continue
+            tokens = alternatives.split(";")
+            record["alternative_candidate_ids"] = ";".join(
+                scoped_by_source.get(token, token) for token in tokens
+            )
+        elif alternatives is not None:
+            remapped = [
+                scoped_by_source.get(str(candidate_id), candidate_id)
+                for candidate_id in alternatives
+            ]
+            record["alternative_candidate_ids"] = (
+                tuple(remapped) if isinstance(alternatives, tuple) else remapped
+            )
+
+
 def _candidate_record(candidate, rank, fallback_backend, fallback_scheme):
     if isinstance(candidate, dict):
         record = dict(candidate)

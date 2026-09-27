@@ -21,6 +21,12 @@ from intraphy.coordinates import Interval0
 from typing import Optional
 
 
+def _validate_max_dp_cells(max_dp_cells):
+    if max_dp_cells is not None and (type(max_dp_cells) is not int or max_dp_cells < 1):
+        raise ValueError("max_dp_cells must be None or a positive integer")
+    return max_dp_cells
+
+
 def _normalized_nucleotide_sequence(sequence: str) -> str:
     normalized = []
     for base in (sequence or "").upper():
@@ -117,6 +123,7 @@ def anchored_short_alignment(
     left_anchor_id: Optional[str] = None,
     right_anchor_id: Optional[str] = None,
     search_interval: Optional[dict] = None,
+    max_dp_cells: Optional[int] = MAX_INTERNAL_DP_CELLS,
 ) -> AlignmentCandidateSet:
     """Return distinct optimal alignments for one anchor-bounded DNA interval.
 
@@ -124,6 +131,7 @@ def anchored_short_alignment(
     reported by Biopython are enumerated; near-optimal candidates are outside
     this adapter's search contract.
     """
+    max_dp_cells = _validate_max_dp_cells(max_dp_cells)
     mode = (mode or "global").lower()
     if mode not in {"global", "local"}:
         raise AlignmentBackendError(f"unsupported bounded short alignment mode: {mode}")
@@ -149,10 +157,13 @@ def anchored_short_alignment(
             search_interval=bounded_interval,
         )
     cell_count = len(query) * len(target)
-    if cell_count > MAX_INTERNAL_DP_CELLS:
+    if max_dp_cells is not None and cell_count > max_dp_cells:
         raise AlignmentBackendError(
-            f"bounded internal {mode} alignment requires {cell_count} DP cells; "
-            "narrow the anchor-bounded interval or select an external backend"
+            f"bounded internal {mode} alignment rejected by the DP resource guard: "
+            f"query_occurrence_id={query_occurrence_id!r} "
+            f"(length={len(query)}), target_occurrence_id={target_occurrence_id!r} "
+            f"(length={len(target)}), cells={cell_count}, budget={max_dp_cells}; "
+            "the complete alignment was rejected without truncating DP states"
         )
 
     from Bio.Align import PairwiseAligner

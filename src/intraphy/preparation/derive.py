@@ -1,7 +1,9 @@
 """preparation / derive: explicit implementation ownership."""
 from __future__ import annotations
 
+from intraphy.aligners.short import _validate_max_dp_cells
 from intraphy.aligners.runner import available_alignment_backends
+from intraphy.aligners.types import MAX_INTERNAL_DP_CELLS
 from intraphy.mapping.clustering import cluster_segments
 from intraphy.mapping.fields import MATCH_FIELDS
 from intraphy.mapping.fields import SEGMENT_FIELDS
@@ -17,7 +19,8 @@ from pathlib import Path
 import csv
 
 
-def derive_tables(input_dir, output_dir=None, identity_threshold=0.7, distance_table=None, aligner="mafft", threads=1, min_size_ratio=0.25, context_aligner="minimap2", coding_msa_mode="linsi", short_context_max_length=300):
+def derive_tables(input_dir, output_dir=None, identity_threshold=0.7, distance_table=None, aligner="mafft", threads=1, min_size_ratio=0.25, context_aligner="minimap2", coding_msa_mode="linsi", short_context_max_length=300, *, protein_evidence_provider=None, pair_scoring_executor="thread", short_alignment_max_dp_cells=MAX_INTERNAL_DP_CELLS, match_staging_path=None, progress_callback=None, collect_matches=True):
+    short_alignment_max_dp_cells = _validate_max_dp_cells(short_alignment_max_dp_cells)
     input_dir = Path(input_dir)
     output_dir = Path(output_dir or input_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -41,6 +44,12 @@ def derive_tables(input_dir, output_dir=None, identity_threshold=0.7, distance_t
             coding_msa_mode=coding_msa_mode,
             short_context_max_length=short_context_max_length,
             gene_loci=gene_loci,
+            protein_evidence_provider=protein_evidence_provider,
+            pair_scoring_executor=pair_scoring_executor,
+            short_alignment_max_dp_cells=short_alignment_max_dp_cells,
+            match_staging_path=match_staging_path,
+            progress_callback=progress_callback,
+            collect_matches=collect_matches,
         )
     write_tsv(output_dir / "segment_homology.tsv", homology, ["homology_id", "occurrence_id", "support_type", "confidence", "source_label"])
     backend_rows = []
@@ -60,12 +69,16 @@ def derive_tables(input_dir, output_dir=None, identity_threshold=0.7, distance_t
                 "threads": threads,
                 "min_size_ratio": f"{min_size_ratio:.6g}",
                 "short_context_max_length": int(short_context_max_length),
+                "short_alignment_dp_cell_budget": (
+                    "unlimited" if short_alignment_max_dp_cells is None
+                    else short_alignment_max_dp_cells
+                ),
                 "coding_msa_mode": coding_msa_mode,
                 "notes": (
                     f"{row['notes']}; min_size_ratio is restricted to non-exon-like prefiltering"
                     if selected_exon or selected_context
                     else row["notes"]
-                ),
+                ) + "; short-alignment DP budget rejects the complete alignment when exceeded; DP states are not truncated",
             }
         )
     write_tsv(
@@ -78,6 +91,7 @@ def derive_tables(input_dir, output_dir=None, identity_threshold=0.7, distance_t
             "threads",
             "min_size_ratio",
             "short_context_max_length",
+            "short_alignment_dp_cell_budget",
             "coding_msa_mode",
             "notes",
             "selected_exon",

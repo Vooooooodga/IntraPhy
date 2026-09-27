@@ -50,7 +50,7 @@ def generator(space: StateSpace, model: RateModel, origins: dict[str, str], chil
 
 
 def evaluate_model(space: StateSpace, tree, tips, model: RateModel, *,
-                   max_origins: int = 256, posterior: bool = True,
+                   max_origins: int | None = None, posterior: bool = True,
                    counts: bool = True, branch_length_mode: str = "supplied"):
     if not space.complete:
         raise ValueError("state_space_incomplete")

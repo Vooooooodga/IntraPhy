@@ -1,36 +1,41 @@
-> **V18 legacy documentation / retained reference.** The default V19 model and
-> commands are described in [the README](../README.md) and
-> [exon_structure_model.md](exon_structure_model.md). Do not interpret the old
-> independent-layer analyses as exon configuration inference.
+# Quick start
 
-# Quick start: ordinary genomic files
+IntraPhy estimates event rates and reconstructs ancestral exon-copy material and
+splice-feature availability on a fixed rooted species tree. A run requires a
+qualified, user-supplied finite homology/opportunity catalogue in
+`intraphy.exon-locus-model/1` JSON and one rooted tree in TSV or Newick format.
 
-Install IntraPhy, MAFFT and minimap2 as described in [installation](installation.md).
-An ordinary run uses **genomic FASTA + GFF/GTF + a supplied rooted species tree**.
-It does not require a user-written manifest. Read [input details](inputs.md) for
-whole-genome selection, combined locus FASTA, AGAT and coordinate conventions.
+Run the small synthetic Dscam-like example from the repository root:
 
 ```bash
-intraphy example --output-dir example
-intraphy check --fasta example --gff example --species-tree example/species_tree.nwk
-intraphy build-case --fasta example --gff example \
-  --species-tree example/species_tree.nwk --output-dir work/example --threads 2
-intraphy run --input-dir work/example --output-dir results/example --threads 2
-intraphy visualize --input-dir work/example --result-dir results/example \
-  --output-dir figures/example
+intraphy analyze --locus-model examples/exon_locus/dscam_like_model.json \
+  --species-tree examples/exon_locus/species_tree.tsv \
+  --expected-edits \
+  --output-dir results/dscam_like
 ```
 
-Open `figures/example/index.html`. The linked methods guide uses labelled
-synthetic examples; the target panels below it use the actual saved run results.
-The standalone guide needs no input data or alignment tools:
+Groups declared `fit` use their positive supplied values as starting values for
+nonnegative maximum likelihood. Groups declared `fixed` remain constant. Use
+`--parameter-mode fixed` to evaluate every supplied value as fixed. The tree,
+branch lengths and their units are fixed inputs. `--threads` applies to
+conditionally independent locus units; one connected unit is serial.
 
-```bash
-intraphy explain --output-dir method-guide
-```
+The model file explicitly supplies the root distribution, homology/copy slots,
+DNA material, exon and splice-link features, typed event opportunities,
+observation evidence, global rate groups, and provenance. IntraPhy compiles the
+full state closure from root support. It records fit diagnostics in
+`locus_fit.json` and ancestral material/copy/feature marginals in
+`locus_history.json`. The command requests branch event counts with
+`--expected-edits`; this calculation is optional and can take substantially
+longer.
 
-For whole-genome annotations add `--orthologs OG0001.fa` to `check`/`build-case`.
-FASTA member IDs select exact annotated loci; their sequences are not a substitute
-for genomic DNA. File stems match tree tips. All supplied target transcript paths
-are retained by default. No separate upstream/downstream files are required.
-An unavailable CTMC fit is not evidence that no event occurred. Read the
-[counting rules](event_counting.md) before totaling branch rows.
+Raw genomic inputs remain available for upstream preparation. See [input
+notes](inputs.md) for FASTA/GFF selection, `check`, `build-case` and
+`derive-tables`. Those operations do not automatically infer the qualified copy
+homology and opportunity hypotheses required by the locus JSON model. Prepared
+inputs can use explicit compatibility choices `--model exon-parsimony` or
+`--model exon-ctmc`.
+
+The [model reference](exon_structure_model.md) defines the state space, event
+process, likelihood, observation model and inferential scope. The
+[architecture](architecture.md) maps those concepts to the code.

@@ -15,7 +15,8 @@ def add_statistics_commands(sub):
     cmd.add_argument("--species-tree", required=True, help="Prepared species_tree.tsv")
     cmd.add_argument("--exon-rates", required=True, help="Fixed relative operation rates and their provenance.")
     cmd.add_argument("--output-dir", required=True)
-    cmd.add_argument("--max-states", type=int, default=1024)
+    cmd.add_argument("--max-states", type=int, default=None,
+                     help="Optional explicit state-space limit; default enumerates the full declared closure.")
     cmd.add_argument("--observation-view", choices=("annotation", "evidence"), default="evidence")
     cmd.add_argument("--gene-bootstrap", type=int, default=0)
     cmd.add_argument("--foreground-child", action="append", default=[])

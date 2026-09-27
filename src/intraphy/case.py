@@ -3,6 +3,8 @@
 from collections import Counter, defaultdict
 from pathlib import Path
 
+from intraphy.aligners.short import _validate_max_dp_cells
+from intraphy.aligners.types import MAX_INTERNAL_DP_CELLS
 from .alignment import local_alignment_stats, revcomp as reverse_complement, splice_motif_score
 from .io import parse_fasta, read_tsv, write_tsv
 from .preprocess import extract_gene, derive_tables, read_annotation, translate_cds
@@ -190,7 +192,9 @@ def build_case(
     coding_msa_mode="linsi",
     short_context_max_length=300,
     *, target_rows=None, allow_unannotated=False,
+    short_alignment_max_dp_cells=MAX_INTERNAL_DP_CELLS,
 ):
+    short_alignment_max_dp_cells = _validate_max_dp_cells(short_alignment_max_dp_cells)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     from .preparation.manifests import load_manifest
@@ -252,6 +256,7 @@ def build_case(
             context_aligner=context_aligner,
             coding_msa_mode=coding_msa_mode,
             short_context_max_length=short_context_max_length,
+            short_alignment_max_dp_cells=short_alignment_max_dp_cells,
         )
     write_tsv(output_dir / "case_build_report.tsv", report, ["case_id", "species", "gene_id", "gene_copy_id", "status", "segment_count", "message"])
     return report

@@ -1,19 +1,21 @@
-"""V19 CLI surface: exon structures, not RNA usage or legacy layer relabeling."""
+"""CLI surface for exon-copy and splice-feature inference."""
 from __future__ import annotations
 from pathlib import Path
 from .file_inputs import add_file_inputs
 from ..verification.exon_cases import SCENARIOS
 
-MODELS = ("exon-parsimony", "exon-ctmc")
+MODELS = ("exon-locus-ctmc", "exon-parsimony", "exon-ctmc")
 
 
 def add_configuration_options(command):
-    command.add_argument("--exon-configurations", help="Explicit V19 JSONL catalogue; never a legacy P/R/J table.")
+    command.add_argument("--exon-configurations", help="Explicit exon-configuration JSONL catalogue.")
     command.add_argument("--exon-rates", help="Explicit fixed-rate JSON for exon-ctmc; no invented default estimates.")
     command.add_argument("--observation-view", choices=("evidence", "annotation"), default="evidence")
-    command.add_argument("--max-states", type=int, default=1024, help="Finite candidate-state limit; exceeding it stops inference.")
-    command.add_argument("--max-origin-scenarios", type=int, default=256)
-    command.add_argument("--max-observation-scenarios", type=int, default=64)
+    command.add_argument("--max-states", type=int, default=None, help="Optional finite candidate-state limit; exceeding it stops inference.")
+    command.add_argument("--max-origin-scenarios", type=int, default=None,
+                         help="Optional origin-scenario limit; exceeding it stops inference.")
+    command.add_argument("--max-observation-scenarios", type=int, default=None,
+                         help="Optional positive scenario limit; default enumerates all scenarios lazily.")
     command.add_argument("--max-locus-bases", type=int, default=100000, help="Genomic MSA budget; sequence is not silently cropped.")
     command.add_argument("--alignment-timeout", type=int, default=600)
     command.add_argument("--exon-identity", type=float, default=.7, help="Explicit, uncalibrated nucleotide evidence threshold.")
@@ -21,20 +23,22 @@ def add_configuration_options(command):
     command.add_argument("--anchor-identity", type=float, default=.8)
     command.add_argument("--origin-root-sensitivity", nargs="+", type=float, default=[],
                          help="Explicit alternative root-opportunity weights; conditional sensitivity, not model selection.")
-    command.add_argument("--expected-edits", action="store_true", help="Compute marked CTMC counts; may be substantially slower.")
+    command.add_argument("--expected-edits", action="store_true",
+                         help="Compute marked CTMC branch counts; can be substantially slower.")
 
 
 def add_exon_commands(sub):
     from .exon_statistics import add_statistics_commands
     add_statistics_commands(sub)
-    analyze = sub.add_parser("analyze", help="V19: genomic FASTA/GFF/tree to exon structural histories in one command.")
-    add_file_inputs(analyze)
-    analyze.add_argument("--species-tree", required=True)
+    analyze = sub.add_parser("analyze", help="Fit exon-copy and splice-feature histories or prepare raw genomic inputs.")
+    add_file_inputs(analyze, required=False)
+    from .locus import add_locus_options
+    add_locus_options(analyze)
     analyze.add_argument("--output-dir", required=True)
     analyze.add_argument("--threads", type=int, default=1)
     analyze.add_argument("--flank", type=int, default=1000)
     analyze.add_argument("--max-extension", type=int, default=10000)
-    analyze.add_argument("--model", choices=MODELS, default="exon-parsimony")
+    analyze.add_argument("--model", choices=MODELS, default="exon-locus-ctmc")
     analyze.add_argument("--branch-length-mode", choices=("supplied", "unit"), default="supplied")
     add_configuration_options(analyze)
     cesar = sub.add_parser("realign-exons", help="Optional CESAR2 coding gene-mode prediction, separate from observations.")
@@ -48,7 +52,7 @@ def add_exon_commands(sub):
     cesar.add_argument("--profile-dir", required=True, help="Explicit first/last/acceptor/donor profiles, with no clade defaults.")
     cesar.add_argument("--codon-matrix", required=True)
     cesar.add_argument("--timeout", type=int, default=600)
-    example = sub.add_parser("example-exons", help="Raw V19 structural and observation-error test cases.")
+    example = sub.add_parser("example-exons", help="Synthetic structural and observation-error test cases.")
     example.add_argument("--output-dir", required=True)
     example.add_argument("--scenario", choices=SCENARIOS, default="split_insertion")
     example.add_argument("--seed", type=int, default=19)

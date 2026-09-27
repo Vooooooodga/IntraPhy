@@ -29,7 +29,7 @@ class InferenceUnit:
     tips: dict[str, np.ndarray]
 
 
-def load_units(paths, tree, *, max_states=1024, observation_view="evidence"):
+def load_units(paths, tree, *, max_states=None, observation_view="evidence"):
     units, excluded = [], []
     catalogues = validate_collection(tuple(c for path in paths for c in read_catalogues(path)))
     for c in catalogues:

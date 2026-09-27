@@ -85,14 +85,14 @@ class CommandTests(unittest.TestCase):
         parser=build_parser()
         for value in ('nan','inf','-0.1','1.1'):
             with self.subTest(value=value):
-                args=parser.parse_args(['run','--input-dir','in','--output-dir','out','--min-callable-fraction',value])
+                args=parser.parse_args(['run','--model','exon-parsimony','--input-dir','in','--output-dir','out','--min-callable-fraction',value])
                 with self.assertRaises(ValueError): validate_arguments(args)
 
     def test_default_scope_is_all(self):
         args=build_parser().parse_args(['run','--input-dir','in','--output-dir','out'])
         self.assertEqual(args.analysis_range,'all')
-        self.assertEqual(args.model,'exon-parsimony')
+        self.assertEqual(args.model,'exon-locus-ctmc')
 
     def test_formal_bootstrap_not_silently_accepted(self):
-        args=build_parser().parse_args(['run','--input-dir','in','--output-dir','out','--bootstrap-replicates','1'])
+        args=build_parser().parse_args(['run','--model','exon-parsimony','--input-dir','in','--output-dir','out','--bootstrap-replicates','1'])
         with self.assertRaises(ValueError): validate_arguments(args)

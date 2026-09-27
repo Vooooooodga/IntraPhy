@@ -1,10 +1,10 @@
 """Shared command-line definitions for manifest-free genomic inputs."""
 
 
-def add_file_inputs(command):
+def add_file_inputs(command, *, required=True):
     command.add_argument("--allow-unannotated-loci", action="store_true",
                          help="Keep gene-only loci as unknown; never treat a gene span as an exon.")
-    source = command.add_mutually_exclusive_group(required=True)
+    source = command.add_mutually_exclusive_group(required=required)
     source.add_argument("--fasta", nargs="+", metavar="PATH",
                         help="Genomic FASTA files or a flat directory; Species.fa matches Species.gff3.")
     source.add_argument("--manifest", help="Optional advanced TSV input; ordinary runs do not need a table.")

@@ -62,17 +62,17 @@ class ExonContractTests(unittest.TestCase):
 
     def test_new_default_is_not_legacy_layer_model(self):
         args = build_parser().parse_args(["run", "--input-dir", "in", "--output-dir", "out"])
-        self.assertEqual(args.model, "exon-parsimony")
+        self.assertEqual(args.model, "exon-locus-ctmc")
         self.assertEqual(args.observation_view, "evidence")
 
     def test_legacy_only_flags_are_not_silently_ignored(self):
         for flag, value in [("--annotation-view", "canonical"), ("--root-frequency", "stationary"),
                             ("--ascertainment", "variable-only"), ("--analysis-range", "high-coverage")]:
-            args = build_parser().parse_args(["run", "--input-dir", "in", "--output-dir", "out", flag, value])
+            args = build_parser().parse_args(["run", "--model", "exon-parsimony", "--input-dir", "in", "--output-dir", "out", flag, value])
             with self.assertRaises(ValueError): validate_arguments(args)
 
     def test_explicit_catalogue_needs_no_aligner(self):
-        args = build_parser().parse_args(["run", "--input-dir", "in", "--output-dir", "out", "--exon-configurations", "c.jsonl"])
+        args = build_parser().parse_args(["run", "--model", "exon-parsimony", "--input-dir", "in", "--output-dir", "out", "--exon-configurations", "c.jsonl"])
         self.assertEqual(required_tools(args), [])
 
     def test_rates_are_explicit_and_output_is_not_overwritten(self):

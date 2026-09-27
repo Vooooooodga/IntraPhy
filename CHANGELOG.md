@@ -1,3 +1,15 @@
+# 0.20.0 — exon-copy and splice-feature CTMC
+
+- Add a strict `intraphy.exon-locus-model/1` JSON input for evidence-qualified
+  copy positions, DNA lifecycle, exon/splice availability, root support,
+  observations and a finite event-opportunity catalogue.
+- Compile the full root-seeded reachable state closure and evaluate joint
+  continuous-time histories on a fixed rooted species tree.
+- Add global rate groups with mixed fixed/fit modes, conditional ML diagnostics,
+  ancestral material/copy/feature marginals and expected branch event counts.
+- Preserve raw FASTA/GFF preparation and named compatibility model paths; the
+  locus model requires its own explicit biological catalogue.
+
 # 0.19.1 — V19 audit corrections (2026-09-21)
 
 - Replace asymmetric interval masks with source-qualified atomic structure alternatives:

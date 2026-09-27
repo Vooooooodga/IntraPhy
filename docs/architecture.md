@@ -1,37 +1,31 @@
-# IntraPhy 0.19.1 architecture
+# IntraPhy architecture
 
-![Implementation ownership](figures/architecture.svg)
-
-Ordinary functions and immutable domain objects, not a generic workflow framework.
-One exon or a dependent local exon configuration is the structural model object.
+The default inference path consumes a strict JSON model and a fixed rooted tree.
+Domain objects compile the declared catalogue into its complete root-seeded
+reachable closure; sparse CTMC likelihood, fitting and posterior summaries remain
+separate from input parsing and output serialization.
 
 | Responsibility | Owner |
 |---|---|
-| Native FASTA/GFF coordinates and target selection | `inputs/`, `preparation/`, `structure/native.py` |
-| Full supplied-locus MSA and corroboration | `structure/alignment.py`, `corroboration.py` |
-| Whole-configuration annotation alternatives | `structure/alternatives.py` |
-| Candidate assembly and observation compatibility | `structure/build.py`, `observations.py` |
-| Coordinate-identity validation at every entry | `structure/validation.py`, called by `serialization.py` |
-| Immutable exons, source payloads and configurations | `structure/types.py`, `material.py` |
-| Elementary edits, consequences and opportunity weights | `structure/edits.py` |
-| Finite state catalogue and exact geometry preflight | `structure/space.py` |
-| Canonical branches and declared source opportunities | `structure/tree_context.py`, `origins.py` |
-| Sparse directed edit distances | `structure/paths.py` |
-| All-optimal parsimony | `inference/configuration_dp.py`, `configuration_history.py` |
-| Finite CTMC and bounded run-local kernels | `inference/configuration_ctmc.py`, `configuration_model.py`, `kernel_cache.py` |
-| Pooled scales and whole-gene resampling | `inference/exon_rates.py`, `exon_resampling.py` |
-| Read-only result diagrams | `reporting/exon_results.py`, `exon_drawing.py` |
-| Computed teaching examples and four current plates | `reporting/exon_guide*.py` |
+| CLI model routing and preflight | `commands/parser.py`, `commands/locus.py`, `commands/preflight.py`, `cli.py` |
+| Conditional rate statistics and evidence-table preparation | `commands/locus_statistics.py`, `inference/locus_statistics_run.py`, `inference/locus_evidence.py` |
+| Strict JSON records | `inference/locus_codec.py` |
+| Model assembly and fixed-tree input | `inference/locus_io.py` |
+| Labelled copies, material, features and opportunities | `structure/locus_types.py` |
+| Reachable finite event process | `structure/locus_process.py`, `locus_events.py` |
+| Tip observation compatibility and surveyed detection | `structure/locus_observations.py` |
+| Cross-record biological consistency checks | `structure/locus_validation.py` |
+| Sparse likelihood, posteriors and marked counts | `inference/locus_likelihood.py` |
+| Shared nonnegative rate fitting and diagnostics | `inference/locus_rates.py` |
+| Model-specific history and fit outputs | `inference/locus_run.py` |
+| Raw genomic preparation and compatibility models | `inputs/`, `preparation/`, `commands/exons.py`, existing inference modules |
 
-`analyze` prepares files and calls configuration inference. Explicit schema-2
-catalogues bypass alignment, not validation. Pure numerical functions never read
-GFF, repair annotation or generate figures. The renderer reads saved results;
-only the explicitly synthetic teaching-example generator runs inference.
+The CLI preflight loads and validates a qualified locus model before it reserves
+an output directory. This route does not invoke sequence alignment tools or
+prepare FASTA/GFF inputs. Raw genomic input preparation remains a separate,
+explicit path and the old model names remain available for those prepared inputs.
 
-Legacy V18 P/R/J modules remain explicit baselines; they are not silently used by
-configuration inference. Current and legacy catalogue/model identifiers differ.
-One entry point cannot assign extra weight to the same coordinates by renaming a
-unit. A failure cannot authorize reuse of old successful probability output.
-
-See [audit resolutions](v0191_audit_resolution.md), [model](exon_structure_model.md)
-and [validation](v0191_validation.md). Source modules remain under 500 lines.
+The main result artifacts are `locus_fit.json` and `locus_history.json`; their
+meaning and conditional assumptions are defined in
+[the model documentation](exon_structure_model.md). A locus-specific graphic
+renderer is not yet provided; `visualize` reports this clearly for these results.
