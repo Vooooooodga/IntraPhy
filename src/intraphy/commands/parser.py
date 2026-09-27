@@ -4,7 +4,7 @@ from intraphy import __version__
 from intraphy.verification.calibration import DEFAULT_SCENARIOS
 def build_parser():
     parser = argparse.ArgumentParser(
-        prog="intraphy", description="Infer exon-copy and splice-feature histories on a rooted species tree.",
+        prog="intraphy", description="Infer genomic DNA-copy histories on a supplied rooted species tree and labelled homology catalogue.",
         epilog="Primary workflow: analyze --locus-model MODEL --species-tree TREE. Genomic preparation remains available with build-case. See docs/quickstart.md.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -237,7 +237,7 @@ def build_parser():
             default="single-copy",
         )
         cmd.add_argument("--model", choices=["exon-locus-ctmc", "exon-parsimony", "exon-ctmc", "parsimony", "er-ard", "foreground"],
-                         default="exon-locus-ctmc", help="Explicit exon-copy CTMC by default; other model choices select their named compatibility path.")
+                         default="exon-locus-ctmc", help="Explicit genomic DNA-copy CTMC by default; other model choices select their named compatibility path.")
         from .locus import add_locus_options
         add_locus_options(cmd)
         add_configuration_options(cmd)

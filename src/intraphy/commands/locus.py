@@ -1,11 +1,11 @@
-"""Shared command-line options and dispatch for the exon-locus CTMC."""
+"""Shared command-line options and dispatch for genomic DNA-copy histories."""
 
 
 def add_locus_options(command):
     """Register the explicit model/tree interface on supported commands."""
     command.add_argument(
         "--locus-model",
-        help="Complete exon-locus JSON model (intraphy.exon-locus-model/1).",
+        help="DNA-only labelled-copy JSON model (intraphy.exon-locus-model/2); supply homology, opportunities, and root.",
     )
     command.add_argument(
         "--species-tree",

@@ -1,4 +1,4 @@
-"""CLI surface for exon-copy and splice-feature inference."""
+"""CLI surface for genomic DNA-copy and legacy exon models."""
 from __future__ import annotations
 from pathlib import Path
 from .file_inputs import add_file_inputs
@@ -30,7 +30,7 @@ def add_configuration_options(command):
 def add_exon_commands(sub):
     from .exon_statistics import add_statistics_commands
     add_statistics_commands(sub)
-    analyze = sub.add_parser("analyze", help="Fit exon-copy and splice-feature histories or prepare raw genomic inputs.")
+    analyze = sub.add_parser("analyze", help="Fit supplied genomic DNA-copy histories or prepare raw genomic inputs.")
     add_file_inputs(analyze, required=False)
     from .locus import add_locus_options
     add_locus_options(analyze)

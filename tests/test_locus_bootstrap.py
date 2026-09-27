@@ -11,39 +11,31 @@ from intraphy.inference.locus_rates import LocusFitUnit
 from intraphy.structure.locus_sampling import sample_history, sample_tip_observation
 from intraphy.structure.locus_types import (
     CopySlot, EventOpportunity, LocusCatalogue, LocusProcess, LocusState,
-    MaterialTract, ProcessEdge, SpliceFeature,
+    MaterialTract, ProcessEdge,
 )
 from intraphy.topology import SpeciesTree
 
 
-def _fixture(material=(0,), features=None, sensitivity=None, specificity=None,
-             latent_features=()):
-    feature_rows = [
-        {"id": f.id, "kind": f.kind, "required_material": list(f.required_material),
-         "prerequisites": list(f.prerequisites), "copy_id": f.copy_id,
-         "start": f.start, "end": f.end, "donor": f.donor, "acceptor": f.acceptor,
-         "mxe_group": f.mxe_group, "evidence": list(f.evidence)}
-        for f in latent_features
-    ]
+def _fixture(material=(0,), sensitivity=None, specificity=None, state_model="irreversible"):
     catalogue = LocusCatalogue(
-        (MaterialTract("A", 0, 10),), (CopySlot("cA", ("A",)),), tuple(latent_features),
+        (MaterialTract("A", 0, 10),), (CopySlot("cA", ("A",)),),
         (EventOpportunity("del", "delA", "dna_deletion", "loss",
                           material_deletions=("A",), interval=(0, 10)),),
+        provenance="bootstrap fixture", state_model=state_model,
     )
-    present, absent = LocusState((1,), frozenset()), LocusState((2,), frozenset())
+    present = LocusState((1,))
+    absent = LocusState((0 if state_model == "binary" else 2,))
     process = LocusProcess(catalogue, (present, absent),
         (ProcessEdge(0, 1, "del", "delA", "dna_deletion", "loss", 1.0),))
     tree = SpeciesTree([
         {"node_id": "root", "parent_id": "", "label": "root"},
         {"node_id": "tip", "parent_id": "root", "label": "tip", "branch_length": 1.0},
     ])
-    tip = {"material": list(material), "features": features or {},
-           "surveyed_features": [], "sensitivity": {}, "specificity": {},
-           "observed_paths": [], "surveyed_material": ["A"],
+    tip = {"material": list(material), "surveyed_material": ["A"],
            "material_sensitivity": sensitivity or {}, "material_specificity": specificity or {},
            "material_evidence": {"A": "fixed test evidence"}}
     raw_unit = {"family": "f", "unit": "u",
-                "catalogue": {"material": [{"id": "A"}], "features": feature_rows},
+                "catalogue": {"material": [{"id": "A"}], "state_model": state_model},
                 "observations": {"tips": {"tip": tip}}}
     unit = SimpleNamespace(family="f", unit="u", process=process, tree=tree,
                            root_prior=np.array([1.0, 0.0]), tips={"tip": np.array([1.0, 0.0])})
@@ -94,16 +86,20 @@ class LocusBootstrapTests(unittest.TestCase):
             return _simulated_units(bundle, {"loss": 0.7}, rng)[0].tips["tip"]
         np.testing.assert_array_equal(simulate(), simulate())
 
-    def test_feature_metadata_is_rejected_before_comparison(self):
-        bundle, *_ = _fixture(features={"exon": 1})
-        with self.assertRaisesRegex(ValueError, "features"):
-            bootstrap_locus_comparison(bundle, ("loss",), 2, 4,
-                                       sampling_design="fixed_catalogue")
+    def test_legacy_feature_metadata_is_rejected_before_comparison(self):
+        for field, value in (("features", {}), ("observed_paths", []),
+                             ("surveyed_features", [])):
+            with self.subTest(field=field):
+                bundle, *_ = _fixture()
+                bundle.model_record["units"][0]["observations"]["tips"]["tip"][field] = value
+                with self.assertRaisesRegex(ValueError, field):
+                    bootstrap_locus_comparison(bundle, ("loss",), 2, 4,
+                                               sampling_design="fixed_catalogue")
 
-    def test_latent_catalogue_features_are_allowed_without_tip_observations(self):
-        feature = SpliceFeature("exA", "exon", ("A",), copy_id="cA", start=0, end=10)
-        bundle, *_ = _fixture(latent_features=(feature,))
+    def test_binary_state_model_is_retained_in_fixed_catalogue(self):
+        bundle, process, _tree, _tip = _fixture(state_model="binary")
         validate_dna_bootstrap_design(bundle)
+        self.assertEqual(process.states[1], LocusState((0,)))
 
     def test_misaligned_material_order_is_rejected(self):
         bundle, *_ = _fixture()

@@ -15,7 +15,7 @@ from intraphy.inference.locus_run import analyze_locus
 
 def _write_input(directory):
     model = {
-        "schema": "intraphy.exon-locus-model/1", "model": "exon-locus-ctmc",
+        "schema": "intraphy.exon-locus-model/2", "model": "exon-locus-ctmc",
         "branch_length_unit": "declared opportunity units",
         "tree_provenance": "synthetic tree", "provenance": "synthetic model",
         "independence_provenance": "one connected locus",
@@ -25,16 +25,15 @@ def _write_input(directory):
             "family": "family", "unit": "unit",
             "catalogue": {
                 "provenance": "supported synthetic catalogue",
+                "state_model": "irreversible",
                 "material": [{"id": "m", "start": 10, "end": 20}],
                 "copies": [{"id": "copy", "material_ids": ["m"]}],
-                "features": [{"id": "exon", "kind": "exon", "required_material": ["m"],
-                              "copy_id": "copy", "start": 10, "end": 20}],
                 "opportunities": [{"id": "deletion", "outcome_id": "delete",
                                    "kind": "dna_deletion", "rate_group": "deletion",
                                    "material_deletions": ["m"], "interval": [10, 20]}],
             },
             "root": {"provenance": "explicit root", "entries": [
-                {"state": {"material": [1], "active_features": ["exon"]}, "weight": 1.0}]},
+                {"state": {"material": [1]}, "weight": 1.0}]},
             "observations": {"provenance": "synthetic tips", "tips": {
                 "A": {"material": [1]}, "B": {"material": [0]}}},
         }],
@@ -125,6 +124,9 @@ class LocusCommandTests(unittest.TestCase):
                 self.assertEqual(fit_record["parameter_status"], expected)
                 self.assertEqual(history["parameter_status"], expected)
                 self.assertEqual(history["parameter_mode"], mode)
+                self.assertEqual(history["schema"], "intraphy.exon-locus-history/2")
+                self.assertEqual(history["units"][0]["state_model"], "irreversible")
+                self.assertNotIn("feature_available", history["units"][0]["node_marginals"][0])
 
     def test_failed_fit_keeps_diagnostics_without_history(self):
         with tempfile.TemporaryDirectory() as directory:

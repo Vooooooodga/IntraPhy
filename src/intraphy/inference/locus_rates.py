@@ -20,8 +20,6 @@ class LocusFitUnit:
     tips: Mapping[str, object]
     root_prior: object
     name: str = ""
-    feature_sensitivity: Mapping[str, float] | None = None
-    feature_specificity: Mapping[str, float] | None = None
 
 
 @dataclass(frozen=True)
@@ -59,17 +57,13 @@ def _unit_log_likelihood(task):
     index, rates = task
     unit = _WORKER_UNITS[index]
     return evaluate_locus(unit.process, unit.tree, unit.tips, unit.root_prior,
-                          rates, posterior=False,
-                          feature_sensitivity=unit.feature_sensitivity,
-                          feature_specificity=unit.feature_specificity).log_likelihood
+                          rates, posterior=False).log_likelihood
 
 
 def _evaluate_units(units, rates, pool=None):
     if pool is None:
         values = [evaluate_locus(u.process, u.tree, u.tips, u.root_prior,
-                                 rates, posterior=False,
-                                 feature_sensitivity=u.feature_sensitivity,
-                                 feature_specificity=u.feature_specificity).log_likelihood for u in units]
+                                 rates, posterior=False).log_likelihood for u in units]
     else:
         values = list(pool.map(_unit_log_likelihood,
                                ((index, dict(rates)) for index in range(len(units)))))

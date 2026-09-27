@@ -9,7 +9,7 @@ from intraphy.inference.locus_io import load_locus_model
 
 def _model():
     return {
-        "schema": "intraphy.exon-locus-model/1", "model": "exon-locus-ctmc",
+        "schema": "intraphy.exon-locus-model/2", "model": "exon-locus-ctmc",
         "branch_length_unit": "declared opportunity units",
         "tree_provenance": "test tree", "provenance": "test model",
         "independence_provenance": "single locus unit",
@@ -19,18 +19,18 @@ def _model():
             "family": "Mhc", "unit": "relay",
             "catalogue": {
                 "provenance": "synthetic locus",
+                "state_model": "irreversible",
                 "material": [{"id": "copy_A", "start": 10, "end": 20}],
                 "copies": [{"id": "A", "material_ids": ["copy_A"]}],
-                "features": [],
                 "opportunities": [{"id": "delete_A", "outcome_id": "del",
                                    "kind": "dna_deletion", "rate_group": "delete",
                                    "material_deletions": ["copy_A"], "interval": [10, 20]}],
             },
             "root": {"provenance": "fixed present root", "entries": [
-                {"state": {"material": [1], "active_features": []}, "weight": 1.0}]},
+                {"state": {"material": [1]}, "weight": 1.0}]},
             "observations": {"provenance": "initial calls", "tips": {
-                "A": {"material": [1], "features": {}, "surveyed_features": []},
-                "B": {"material": [None], "features": {}, "surveyed_features": []},
+                "A": {"material": [1]},
+                "B": {"material": [None]},
             }},
         }],
     }
@@ -63,7 +63,7 @@ class LocusEvidenceBridgeTests(unittest.TestCase):
         self.assertEqual(tip_a["surveyed_material"], ["copy_A"])
         self.assertEqual(tip_a["material_evidence"], {"copy_A": "assembly interval search v1"})
         self.assertEqual(tip_a["material_sensitivity"], {"copy_A": 0.8})
-        self.assertEqual(tip_a["features"], {})
+        self.assertNotIn("features", tip_a)
         self.assertEqual(tip_b["material"], [None])
         self.assertEqual(tip_b["material_evidence"], {"copy_A": "no callable locus evidence"})
         self.assertEqual(tip_b["material_sensitivity"], {})

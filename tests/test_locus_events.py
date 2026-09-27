@@ -1,188 +1,120 @@
 import unittest
 from dataclasses import replace
 
+from intraphy.structure.locus_events import apply_outcome
 from intraphy.structure.locus_process import build_locus_process
-from intraphy.structure.locus_types import (
-    CopySlot, EventOpportunity, LocusCatalogue, LocusState,
-    MaterialTract, SpliceFeature,
-)
+from intraphy.structure.locus_types import CopySlot, EventOpportunity, LocusCatalogue, LocusState, MaterialTract
 
 
-def duplication_catalogue(source_feature_active=True, with_deletion=True):
-    material = (MaterialTract("src_dna", 0, 5), MaterialTract("target_dna", 10, 15),
-                MaterialTract("flank_dna", 18, 23))
-    copies = (CopySlot("source", ("src_dna",), evidence=("collinear block",)),
-              CopySlot("target", ("target_dna",), homologous_to=("source",), evidence=("copy alignment",)),
-              CopySlot("flank", ("flank_dna",), evidence=("annotation",)))
-    features = (SpliceFeature("source_exon", "exon", ("src_dna",), copy_id="source",
-                              start=0, end=5, evidence=("source annotation",)),
-                SpliceFeature("target_exon", "exon", ("target_dna",), copy_id="target",
-                              start=10, end=15, evidence=("target homology",)),
-                SpliceFeature("flank_exon", "exon", ("flank_dna",), copy_id="flank",
-                              start=18, end=23, evidence=("flank annotation",)),
-                SpliceFeature("target_flank_splice", "splice", ("target_dna", "flank_dna"),
-                              prerequisites=("target_exon", "flank_exon"), donor=15, acceptor=18))
-    opportunities = [EventOpportunity(
-        "duplication", "duplicate_target", "copy_duplication", "duplication", 1.0,
-        preconditions=(("src_dna", 1), ("target_dna", 0), ("flank_dna", 1)),
-        source_copy="source", target_copy="target", material_gains=("target_dna",),
-        feature_map=(("source_exon", "target_exon"),), context_features=("flank_exon",),
-        graft_features=("target_flank_splice",),
-    )]
-    if with_deletion:
-        opportunities.append(EventOpportunity(
-            "target_deletion", "delete_target", "dna_deletion", "deletion", 1.0,
-            material_deletions=("target_dna",), interval=(10, 15)))
-    catalogue = LocusCatalogue(material, copies, features, tuple(opportunities), provenance="test evidence")
-    active = {"flank_exon"}
-    if source_feature_active:
-        active.add("source_exon")
-    return catalogue, LocusState((1, 0, 1), frozenset(active))
+def copy_catalogue(state_model="irreversible"):
+    material = (MaterialTract("source_dna", 0, 5), MaterialTract("target_dna", 10, 15))
+    copies = (CopySlot("source", ("source_dna",), evidence=("sequence",)),
+              CopySlot("target", ("target_dna",), homologous_to=("source",), evidence=("alignment",)))
+    duplicate = EventOpportunity(
+        "dup", "copy", "copy_duplication", "duplication",
+        preconditions=(("source_dna", 1), ("target_dna", 0)),
+        material_gains=("target_dna",), source_copy="source", target_copy="target")
+    delete = EventOpportunity(
+        "del", "target", "dna_deletion", "deletion",
+        material_deletions=("target_dna",), interval=(10, 15))
+    return LocusCatalogue(material, copies, (duplicate, delete),
+                          provenance="test alignment", state_model=state_model)
 
 
 class LocusEventTests(unittest.TestCase):
-    def test_duplication_maps_features_and_conditionally_grafts_splicing(self):
-        catalogue, active_root = duplication_catalogue(True, False)
-        _, inactive_root = duplication_catalogue(False, False)
-        process = build_locus_process(catalogue, (active_root, inactive_root))
-        edges = [edge for edge in process.edges if edge.kind == "copy_duplication"]
-        self.assertEqual(len(edges), 2)
-        active_target = process.states[edges[0].target]
-        inactive_target = process.states[edges[1].target]
-        self.assertIn("target_exon", active_target.active_features)
-        self.assertIn("target_flank_splice", active_target.active_features)
-        self.assertNotIn("target_exon", inactive_target.active_features)
-        self.assertNotIn("target_flank_splice", inactive_target.active_features)
-        self.assertEqual(active_target.material, (1, 1, 1))
-        self.assertEqual(inactive_target.material, (1, 1, 1))
+    def test_two_models_have_distinct_post_deletion_closure(self):
+        for model, expected, edges in (
+            ("irreversible", {(1, 0), (1, 1), (1, 2)}, 2),
+            ("binary", {(1, 0), (1, 1)}, 2),
+        ):
+            with self.subTest(model=model):
+                catalogue = copy_catalogue(model)
+                process = build_locus_process(catalogue, (LocusState((1, 0)),))
+                self.assertEqual({state.material for state in process.states}, expected)
+                self.assertEqual(len(process.edges), edges)
+                self.assertEqual(catalogue.material_states, (0, 1) if model == "binary" else (0, 1, 2))
+                self.assertTrue(all(not hasattr(state, "active_features") for state in process.states))
+        binary = copy_catalogue("binary")
+        self.assertEqual(apply_outcome(binary, LocusState((1, 0)), binary.opportunities[0]),
+                         LocusState((1, 1)))
+        self.assertEqual(apply_outcome(binary, LocusState((1, 1)), binary.opportunities[1]),
+                         LocusState((1, 0)))
+        irreversible = copy_catalogue()
+        self.assertEqual(apply_outcome(irreversible, LocusState((1, 1)), irreversible.opportunities[1]),
+                         LocusState((1, 2)))
 
-    def test_shared_interval_deletion_is_one_event_and_preserves_unaffected_features(self):
-        material = (MaterialTract("left", 0, 4), MaterialTract("right", 8, 12),
+    def test_interval_deletes_all_present_intersecting_material_once(self):
+        material = (MaterialTract("a", 0, 4), MaterialTract("b", 8, 12),
                     MaterialTract("untouched", 16, 20))
-        copies = (CopySlot("copy", ("left", "right", "untouched")),)
-        features = (SpliceFeature("left_exon", "exon", ("left",), copy_id="copy", start=0, end=4),
-                    SpliceFeature("right_exon", "exon", ("right",), copy_id="copy", start=8, end=12),
-                    SpliceFeature("other_exon", "exon", ("untouched",), copy_id="copy", start=16, end=20))
-        deletion = EventOpportunity("del", "one_interval", "dna_deletion", "deletion", 1.0,
-                                    material_deletions=("left", "right"), interval=(0, 12))
-        catalogue = LocusCatalogue(material, copies, features, (deletion,), provenance="interval evidence")
-        root = LocusState((1, 2, 1), frozenset(("left_exon", "other_exon")))
-        process = build_locus_process(catalogue, (root,))
+        copies = (CopySlot("copy", ("a", "b", "untouched")),)
+        deletion = EventOpportunity("del", "one_interval", "dna_deletion", "deletion",
+                                    material_deletions=("a", "b"), interval=(0, 12))
+        catalogue = LocusCatalogue(material, copies, (deletion,), provenance="interval evidence")
+        process = build_locus_process(catalogue, (LocusState((1, 2, 1)),))
         self.assertEqual(len(process.edges), 1)
-        target = process.states[process.edges[0].target]
-        self.assertEqual(target.material, (2, 2, 1))
-        self.assertEqual(target.active_features, frozenset(("other_exon",)))
-        self.assertEqual(process.edges[0].kind, "dna_deletion")
-        absent_root = LocusState((2, 2, 1), frozenset(("other_exon",)))
-        null_process = build_locus_process(catalogue, (absent_root,))
-        self.assertEqual(null_process.states, (absent_root,))
-        self.assertEqual(null_process.edges, ())
+        self.assertEqual(process.states[process.edges[0].target], LocusState((2, 2, 1)))
+        self.assertEqual(build_locus_process(catalogue, (LocusState((2, 2, 1)),)).edges, ())
 
-    def test_deletion_rejects_a_skipped_modeled_tract_and_partial_overlap(self):
+    def test_deletion_boundaries_and_skipped_tract_are_rejected(self):
         material = (MaterialTract("a", 0, 3), MaterialTract("b", 5, 8),
                     MaterialTract("c", 10, 13))
-        copy = CopySlot("copy", ("a", "b", "c"))
-        features = tuple(SpliceFeature(f"e{i}", "exon", (tract.id,), copy_id="copy",
-                                       start=tract.start, end=tract.end)
-                        for i, tract in enumerate(material))
-        skipped = EventOpportunity("bad", "skip_b", "dna_deletion", "deletion", 1.0,
+        copies = (CopySlot("copy", ("a", "b", "c")),)
+        skipped = EventOpportunity("bad", "skip", "dna_deletion", "deletion",
                                    material_deletions=("a", "c"), interval=(0, 13))
         with self.assertRaisesRegex(ValueError, "every supplied material tract"):
-            LocusCatalogue(material, (copy,), features, (skipped,), provenance="test")
-        one = (MaterialTract("tract", 0, 10),)
-        feature = SpliceFeature("exon", "exon", ("tract",), copy_id="copy", start=0, end=10)
-        partial = EventOpportunity("partial", "boundary", "dna_deletion", "deletion", 1.0,
-                                   material_deletions=("tract",), interval=(2, 8))
+            LocusCatalogue(material, copies, (skipped,), provenance="test")
+        partial = EventOpportunity("bad", "partial", "dna_deletion", "deletion",
+                                   material_deletions=("a",), interval=(1, 3))
         with self.assertRaisesRegex(ValueError, "Split material tracts"):
-            LocusCatalogue(one, (CopySlot("copy", ("tract",)),), (feature,), (partial,), provenance="test")
+            LocusCatalogue(material, copies, (partial,), provenance="test")
 
-    def test_closure_has_no_default_cap_for_128_states(self):
-        material = (MaterialTract("dna", 0, 20),)
-        copy = CopySlot("copy", ("dna",))
-        features = tuple(SpliceFeature(f"e{i}", "exon", ("dna",), copy_id="copy",
-                                       start=2 * i, end=2 * i + 1) for i in range(7))
+    def test_full_reachable_closure_has_no_default_cap(self):
+        material = [MaterialTract("source", 0, 1)]
+        copies = [CopySlot("source", ("source",), evidence=("sequence",))]
         opportunities = []
-        for feature in features:
-            opportunities.extend((
-                EventOpportunity(f"on_{feature.id}", "on", "splice_change", "splice_on", feature_on=(feature.id,)),
-                EventOpportunity(f"off_{feature.id}", "off", "splice_change", "splice_off", feature_off=(feature.id,)),
-            ))
-        catalogue = LocusCatalogue(material, (copy,), features, tuple(opportunities), provenance="toggle fixture")
-        process = build_locus_process(catalogue, (LocusState((1,), frozenset()),))
+        for i in range(7):
+            mid, cid = f"target_{i}", f"copy_{i}"
+            material.append(MaterialTract(mid, 2 * i + 2, 2 * i + 3))
+            copies.append(CopySlot(cid, (mid,), homologous_to=("source",), evidence=("alignment",)))
+            opportunities.append(EventOpportunity(
+                f"dup_{i}", "copy", "copy_duplication", "duplication",
+                preconditions=(("source", 1), (mid, 0)),
+                material_gains=(mid,), source_copy="source", target_copy=cid))
+        catalogue = LocusCatalogue(tuple(material), tuple(copies), tuple(opportunities), provenance="seven alignments")
+        process = build_locus_process(catalogue, (LocusState((1,) + (0,) * 7),))
         self.assertEqual(len(process.states), 128)
-        self.assertEqual(len({state.active_features for state in process.states}), 128)
+        self.assertEqual(len(process.edges), 7 * 64)
 
-    def test_simultaneous_splice_boundary_change_uses_final_feature_set(self):
-        material = (MaterialTract("dna", 0, 10),)
-        copy = CopySlot("copy", ("dna",))
-        features = (SpliceFeature("old_left", "exon", ("dna",), copy_id="copy", start=0, end=3),
-                    SpliceFeature("new_left", "exon", ("dna",), copy_id="copy", start=0, end=4),
-                    SpliceFeature("right", "exon", ("dna",), copy_id="copy", start=7, end=10),
-                    SpliceFeature("old_splice", "splice", ("dna",), prerequisites=("old_left", "right"), donor=3, acceptor=7),
-                    SpliceFeature("new_splice", "splice", ("dna",), prerequisites=("new_left", "right"), donor=4, acceptor=7))
-        change = EventOpportunity("shift", "boundary", "splice_change", "splice",
-                                  feature_on=("new_left", "new_splice"),
-                                  feature_off=("old_left", "old_splice"))
-        catalogue = LocusCatalogue(material, (copy,), features, (change,), provenance="boundary fixture")
-        root = LocusState((1,), frozenset(("old_left", "right", "old_splice")))
-        process = build_locus_process(catalogue, (root,))
-        self.assertEqual(len(process.edges), 1)
-        self.assertEqual(process.states[process.edges[0].target].active_features,
-                         frozenset(("new_left", "right", "new_splice")))
-
-    def test_partially_applicable_outcomes_fail_without_renormalization(self):
-        material = (MaterialTract("dna", 0, 10), MaterialTract("context_dna", 12, 15),
-                    MaterialTract("blocked_dna", 17, 20))
-        copy = CopySlot("copy", ("dna", "context_dna", "blocked_dna"))
-        features = (SpliceFeature("left", "exon", ("dna",), copy_id="copy", start=0, end=3),
-                    SpliceFeature("right", "exon", ("dna",), copy_id="copy", start=7, end=10),
-                    SpliceFeature("context", "exon", ("context_dna",), copy_id="copy", start=12, end=15),
-                    SpliceFeature("blocked", "splice", ("blocked_dna",), prerequisites=("left", "right"), donor=3, acceptor=7))
-        outcomes = (EventOpportunity("choose", "null", "splice_change", "splice", 0.5, feature_on=("left",)),
-                    EventOpportunity("choose", "blocked", "splice_change", "splice", 0.5,
-                                     feature_on=("blocked",)))
-        catalogue = LocusCatalogue(material, (copy,), features, outcomes, provenance="alternative fixture")
-        root = LocusState((1, 1, 0), frozenset(("left", "right", "context")))
+    def test_partial_alternative_deletions_fail_without_weight_renormalization(self):
+        material = (MaterialTract("a", 0, 2), MaterialTract("b", 4, 6))
+        copies = (CopySlot("copy", ("a", "b")),)
+        outcomes = (
+            EventOpportunity("choice", "a", "dna_deletion", "deletion", weight=0.5,
+                             material_deletions=("a",), interval=(0, 2)),
+            EventOpportunity("choice", "b", "dna_deletion", "deletion", weight=0.5,
+                             material_deletions=("b",), interval=(4, 6)),
+        )
+        catalogue = LocusCatalogue(material, copies, outcomes, provenance="two intervals")
         with self.assertRaisesRegex(ValueError, "partially applicable"):
-            build_locus_process(catalogue, (root,))
+            build_locus_process(catalogue, (LocusState((1, 0)),))
 
-    def test_null_alternative_retains_its_weight_without_rate_renormalization(self):
-        material = (MaterialTract("dna", 0, 10),)
-        copy = CopySlot("copy", ("dna",))
-        features = (SpliceFeature("already", "exon", ("dna",), copy_id="copy", start=0, end=3),
-                    SpliceFeature("available", "exon", ("dna",), copy_id="copy", start=5, end=8))
-        outcomes = (EventOpportunity("choice", "null", "splice_change", "splice", 0.5,
-                                     feature_on=("already",)),
-                    EventOpportunity("choice", "gain", "splice_change", "splice", 0.5,
-                                     feature_on=("available",)))
-        catalogue = LocusCatalogue(material, (copy,), features, outcomes, provenance="null outcome fixture")
-        root = LocusState((1,), frozenset(("already",)))
-        process = build_locus_process(catalogue, (root,))
-        edge = next(edge for edge in process.edges if edge.source == process.index[root])
-        self.assertEqual(edge.weight, 0.5)
-        self.assertEqual(process.states[edge.target].active_features,
-                         frozenset(("already", "available")))
-
-    def test_every_alternative_outcome_and_common_gate_are_validated(self):
-        catalogue, _ = duplication_catalogue(True, False)
+    def test_duplication_requires_supplied_homology_evidence_and_preconditions(self):
+        catalogue = copy_catalogue()
         valid = catalogue.opportunities[0]
-        first = replace(valid, weight=0.5)
-        malformed = replace(valid, outcome_id="bad_payload", weight=0.5,
-                             material_gains=("src_dna",))
-        with self.assertRaisesRegex(ValueError, "introduce the disjoint target"):
-            LocusCatalogue(catalogue.material, catalogue.copies, catalogue.features,
-                           (first, malformed), provenance="bad alternative")
-        mismatched_gate = replace(valid, outcome_id="other_context", weight=0.5,
-                                  context_features=())
-        with self.assertRaisesRegex(ValueError, "share all applicability conditions"):
-            LocusCatalogue(catalogue.material, catalogue.copies, catalogue.features,
-                           (first, mismatched_gate), provenance="bad gate")
-
-    def test_duplication_cannot_resurrect_deleted_target_material(self):
-        catalogue, root = duplication_catalogue(True, True)
-        process = build_locus_process(catalogue, (root,))
-        for edge in process.edges:
-            source = process.states[edge.source]
-            target = process.states[edge.target]
-            if source.material[1] == 2:
-                self.assertNotEqual(target.material[1], 1)
+        with self.assertRaisesRegex(ValueError, "homology relation"):
+            LocusCatalogue(catalogue.material,
+                           (catalogue.copies[0], replace(catalogue.copies[1], homologous_to=())),
+                           catalogue.opportunities, provenance="test")
+        with self.assertRaisesRegex(ValueError, "evidence on both"):
+            LocusCatalogue(catalogue.material,
+                           (replace(catalogue.copies[0], evidence=()), catalogue.copies[1]),
+                           catalogue.opportunities, provenance="test")
+        with self.assertRaisesRegex(ValueError, "present source and absent target"):
+            LocusCatalogue(catalogue.material, catalogue.copies,
+                           (replace(valid, preconditions=()),), provenance="test")
+        with self.assertRaisesRegex(ValueError, "selected state model"):
+            LocusCatalogue(catalogue.material, catalogue.copies,
+                           (replace(valid, preconditions=(("source_dna", 2), ("target_dna", 0))),),
+                           provenance="test", state_model="binary")
+        with self.assertRaisesRegex(ValueError, "root state is invalid"):
+            build_locus_process(copy_catalogue("binary"), (LocusState((1, 2)),))

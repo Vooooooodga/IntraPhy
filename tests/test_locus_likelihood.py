@@ -6,20 +6,21 @@ from scipy.linalg import expm
 from scipy.sparse.linalg import expm_multiply
 
 from intraphy.inference.locus_likelihood import evaluate_locus, process_generator
+from intraphy.structure.locus_process import build_locus_process
 from intraphy.structure.locus_types import (
     CopySlot,
+    EventOpportunity,
     LocusCatalogue,
     LocusObservation,
     LocusState,
     MaterialTract,
     ProcessEdge,
-    SpliceFeature,
 )
 from intraphy.topology import SpeciesTree
 
 
 def _process(edges, *, groups=("event",), states=None, catalogue=None):
-    states = states or tuple(LocusState((value,), frozenset()) for value in (0, 1))
+    states = states or tuple(LocusState((value,)) for value in (0, 1))
     if catalogue is None:
         opportunities = tuple(SimpleNamespace(id=group, rate_group=group) for group in groups)
         catalogue = SimpleNamespace(opportunities=opportunities)
@@ -31,15 +32,44 @@ def _tree(rows):
 
 
 class LocusLikelihoodTests(unittest.TestCase):
+    def test_shared_dna_interval_deletion_has_one_hazard_and_one_event_count(self):
+        material = (MaterialTract("left", 0, 3), MaterialTract("right", 5, 8))
+        copies = (CopySlot("copy", ("left", "right")),)
+        deletion = EventOpportunity(
+            "shared", "delete_both", "dna_deletion", "deletion",
+            material_deletions=("left", "right"), interval=(0, 8))
+        tree = _tree([
+            {"node_id": "root", "parent_id": "", "label": "root"},
+            {"node_id": "tip", "parent_id": "root", "label": "tip", "branch_length": 0.7},
+        ])
+        rate = 0.4
+        for state_model, absent in (("binary", 0), ("irreversible", 2)):
+            with self.subTest(state_model=state_model):
+                catalogue = LocusCatalogue(
+                    material, copies, (deletion,),
+                    provenance="shared interval evidence", state_model=state_model)
+                root = LocusState((1, 1))
+                process = build_locus_process(catalogue, (root,))
+                self.assertEqual(len(process.edges), 1)
+                self.assertEqual(process.states[process.edges[0].target], LocusState((absent, absent)))
+                prior = [float(state == root) for state in process.states]
+                result = evaluate_locus(
+                    process, tree, {"tip": LocusObservation((0, 0))},
+                    prior, {"deletion": rate}, counts=True)
+                self.assertAlmostEqual(result.log_likelihood,
+                                       np.log1p(-np.exp(-rate * 0.7)), places=11)
+                self.assertAlmostEqual(result.branch_event_counts["tip"]["opportunity:shared"], 1.0)
+                self.assertAlmostEqual(result.branch_event_counts["tip"]["rate_group:deletion"], 1.0)
+
     def test_sparse_exponential_action_matches_dense_asymmetric_generator(self):
         edges = (
-            ProcessEdge(0, 1, "a", "a1", "gain", "gain", 1.0),
-            ProcessEdge(1, 0, "b", "b1", "loss", "loss", 1.0),
-            ProcessEdge(1, 2, "c", "c1", "splice", "splice", 0.7),
+            ProcessEdge(0, 1, "a", "a1", "copy_duplication", "gain", 1.0),
+            ProcessEdge(1, 0, "b", "b1", "dna_deletion", "loss", 1.0),
+            ProcessEdge(1, 2, "c", "c1", "dna_deletion", "deletion", 0.7),
         )
-        process = _process(edges, groups=("gain", "loss", "splice"),
-                           states=tuple(LocusState((i,), frozenset()) for i in range(3)))
-        rates = {"gain": 0.2, "loss": 0.8, "splice": 0.3}
+        process = _process(edges, groups=("gain", "loss", "deletion"),
+                           states=tuple(LocusState((i,)) for i in range(3)))
+        rates = {"gain": 0.2, "loss": 0.8, "deletion": 0.3}
         q = process_generator(process, rates)
         vector = np.array([0.3, 0.2, 0.5])
         time = 0.7
@@ -48,12 +78,12 @@ class LocusLikelihoodTests(unittest.TestCase):
         np.testing.assert_allclose(sparse, dense, rtol=1e-12, atol=1e-12)
 
     def test_pruning_and_node_posteriors_match_dense_hidden_state_enumeration(self):
-        states = tuple(LocusState((value,), frozenset()) for value in (0, 1, 2))
+        states = tuple(LocusState((value,)) for value in (0, 1, 2))
         process = _process((
-            ProcessEdge(0, 1, "gain", "g1", "splice_change", "gain", 1.0),
+            ProcessEdge(0, 1, "gain", "g1", "copy_duplication", "gain", 1.0),
             ProcessEdge(1, 2, "loss", "l1", "dna_deletion", "loss", 0.7),
-            ProcessEdge(2, 0, "return", "r1", "splice_change", "return", 0.4),
-            ProcessEdge(1, 0, "reverse", "v1", "splice_change", "reverse", 0.2),
+            ProcessEdge(2, 0, "return", "r1", "copy_duplication", "return", 0.4),
+            ProcessEdge(1, 0, "reverse", "v1", "dna_deletion", "reverse", 0.2),
         ), groups=("gain", "loss", "return", "reverse"), states=states)
         rows = [
             {"node_id": "root", "parent_id": "", "label": "root"},
@@ -94,7 +124,7 @@ class LocusLikelihoodTests(unittest.TestCase):
     def test_irreversible_deletion_likelihood_mle_and_marked_counts(self):
         process = _process((ProcessEdge(1, 0, "deletion", "delete", "dna_deletion", "deletion", 1.0),),
                            groups=("deletion",),
-                           states=(LocusState((2,), frozenset()), LocusState((1,), frozenset())))
+                           states=(LocusState((2,)), LocusState((1,))))
         tree = _tree([
             {"node_id": "root", "parent_id": "", "label": "root"},
             {"node_id": "present", "parent_id": "root", "label": "present", "branch_length": 1},
@@ -125,20 +155,19 @@ class LocusLikelihoodTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "sums to one"):
             evaluate_locus(process, tree, {"tip": [0, 1]}, [0, 2], {})
 
-    def test_detector_emission_uses_surveyed_feature_sensitivity_and_specificity(self):
+    def test_detector_emission_enters_tree_likelihood(self):
         catalogue = LocusCatalogue(
             material=(MaterialTract("m", 0, 10),),
             copies=(CopySlot("c", ("m",)),),
-            features=(SpliceFeature("f", "exon", ("m",), copy_id="c", start=0, end=10),),
             opportunities=(), provenance="unit test",
         )
-        states = (LocusState((1,), frozenset()), LocusState((1,), frozenset({"f"})))
+        states = (LocusState((0,)), LocusState((1,)))
         process = _process((), groups=(), states=states, catalogue=catalogue)
-        observation = LocusObservation((1,), (("f", 1),), frozenset({"f"}))
+        observation = LocusObservation((1,), surveyed_material=frozenset({"m"}))
         tree = _tree([{"node_id": "tip", "parent_id": "", "label": "tip"}])
         result = evaluate_locus(process, tree, {"tip": observation}, [0.5, 0.5], {},
-                                feature_sensitivity={"f": 0.8},
-                                feature_specificity={"f": 0.9})
+                                material_sensitivity={"m": 0.8},
+                                material_specificity={"m": 0.9})
         self.assertAlmostEqual(result.log_likelihood, np.log(0.45))
         self.assertAlmostEqual(result.node_posteriors["tip"][1], 0.8 / 0.9)
 

@@ -10,7 +10,7 @@ from .locus_types import LocusCatalogue, LocusProcess, LocusState, ProcessEdge
 def build_locus_process(catalogue: LocusCatalogue, root_states) -> LocusProcess:
     """Build all states reachable from explicitly supplied root support.
 
-    The finite closure is conditional on the supplied copy/feature catalogue
+    The finite closure is conditional on the supplied labelled DNA catalogue
     and event opportunities. There is no default state cap or tip-seeded state
     discovery. A partial set of applicable alternatives fails rather than
     redistributing outcome weights.
@@ -82,6 +82,3 @@ def _check_gate(catalogue, state, event):
     material_index = {tract.id: i for i, tract in enumerate(catalogue.material)}
     if any(state.material[material_index[mid]] != required for mid, required in event.preconditions):
         raise OpportunityUnavailable("material precondition failed")
-    active = state.active_features
-    if not set(event.required_features) <= active or set(event.forbidden_features) & active:
-        raise OpportunityUnavailable("feature precondition failed")

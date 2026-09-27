@@ -15,17 +15,15 @@ def _unit(material_id="m", start=10, end=20, unit_id="u"):
         "family": "family", "unit": unit_id,
         "catalogue": {
             "provenance": "synthetic evidence",
+            "state_model": "irreversible",
             "material": [{"id": material_id, "start": start, "end": end}],
             "copies": [{"id": "copy-" + material_id, "material_ids": [material_id]}],
-            "features": [{"id": "exon-" + material_id, "kind": "exon",
-                          "required_material": [material_id], "copy_id": "copy-" + material_id,
-                          "start": start, "end": end}],
             "opportunities": [{"id": "delete-" + material_id, "outcome_id": "delete",
                                "kind": "dna_deletion", "rate_group": "deletion",
                                "material_deletions": [material_id], "interval": [start, end]}],
         },
         "root": {"provenance": "declared root support", "entries": [
-            {"state": {"material": [1], "active_features": ["exon-" + material_id]}, "weight": 1.0}]},
+            {"state": {"material": [1]}, "weight": 1.0}]},
         "observations": {"provenance": "synthetic tip calls", "tips": {
             "A": {"material": [None]}, "B": {"material": [0]}}},
     }
@@ -33,7 +31,7 @@ def _unit(material_id="m", start=10, end=20, unit_id="u"):
 
 def _model(units=None):
     return {
-        "schema": "intraphy.exon-locus-model/1", "model": "exon-locus-ctmc",
+        "schema": "intraphy.exon-locus-model/2", "model": "exon-locus-ctmc",
         "branch_length_unit": "substitutions per declared opportunity",
         "tree_provenance": "synthetic rooted tree", "provenance": "synthetic model",
         "independence_provenance": "one declared locus unit",
@@ -120,7 +118,7 @@ class LocusIOTests(unittest.TestCase):
     def test_zero_weight_root_entry_and_malformed_precondition_pair_reject(self):
         record = _model()
         record["units"][0]["root"]["entries"].append({
-            "state": {"material": [2], "active_features": []}, "weight": 0.0})
+            "state": {"material": [2]}, "weight": 0.0})
         with self.assertRaisesRegex(ValueError, "positive"):
             self._load(record)
 
@@ -134,6 +132,41 @@ class LocusIOTests(unittest.TestCase):
         record = _model([_unit(), second])
         with self.assertRaisesRegex(ValueError, "overlap on the shared coordinate axis"):
             self._load(record)
+
+    def test_v1_and_splice_fields_are_rejected(self):
+        record = _model()
+        record["schema"] = "intraphy.exon-locus-model/1"
+        with self.assertRaisesRegex(ValueError, "DNA-only"):
+            self._load(record)
+        record = _model()
+        record["units"][0]["catalogue"]["features"] = []
+        with self.assertRaisesRegex(ValueError, "DNA catalogue"):
+            self._load(record)
+        record = _model()
+        record["units"][0]["observations"]["tips"]["A"]["observed_paths"] = []
+        with self.assertRaisesRegex(ValueError, "unknown fields"):
+            self._load(record)
+        record = _model()
+        record["units"][0]["root"]["entries"][0]["state"]["active_features"] = []
+        with self.assertRaisesRegex(ValueError, "root state"):
+            self._load(record)
+        record = _model()
+        record["units"][0]["catalogue"]["opportunities"][0]["feature_off"] = []
+        with self.assertRaisesRegex(ValueError, "event opportunity"):
+            self._load(record)
+
+    def test_state_model_is_explicit(self):
+        record = _model()
+        del record["units"][0]["catalogue"]["state_model"]
+        with self.assertRaisesRegex(ValueError, "state_model"):
+            self._load(record)
+
+    def test_binary_state_model_has_only_absent_and_present(self):
+        record = _model()
+        record["units"][0]["catalogue"]["state_model"] = "binary"
+        unit = self._load(record).units[0]
+        self.assertEqual(unit.process.catalogue.material_states, (0, 1))
+        self.assertEqual({state.material[0] for state in unit.process.states}, {0, 1})
 
 
 if __name__ == "__main__":

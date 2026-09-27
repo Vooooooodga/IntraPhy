@@ -16,7 +16,7 @@ from .locus_codec import (
 )
 from .locus_rates import LocusFitUnit
 
-SCHEMA = "intraphy.exon-locus-model/1"
+SCHEMA = "intraphy.exon-locus-model/2"
 
 
 @dataclass(frozen=True)
@@ -95,6 +95,8 @@ def load_locus_model(model_path, tree_path):
 
 def locus_model_from_record(data, tree_path):
     """Validate an already-decoded model record against a fixed species tree."""
+    if isinstance(data, dict) and data.get("schema") == "intraphy.exon-locus-model/1":
+        raise ValueError("Schema /1 includes splice and transcript-path state; supply a DNA-only intraphy.exon-locus-model/2 record")
     fields = {"schema", "model", "branch_length_unit", "tree_provenance", "provenance",
               "independence_provenance", "rates", "units"}
     data = object_fields(data, fields, "locus model")

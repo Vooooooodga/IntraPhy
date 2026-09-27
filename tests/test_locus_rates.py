@@ -24,7 +24,7 @@ def _tree():
 def _deletion_process():
     catalogue = SimpleNamespace(opportunities=(SimpleNamespace(id="del", rate_group="deletion"),))
     edge = ProcessEdge(1, 0, "del", "del_outcome", "dna_deletion", "deletion", 1.0)
-    states = (LocusState((2,), frozenset()), LocusState((1,), frozenset()))
+    states = (LocusState((2,)), LocusState((1,)))
     return SimpleNamespace(catalogue=catalogue, states=states, edges=(edge,))
 
 
@@ -57,7 +57,7 @@ class LocusRateTests(unittest.TestCase):
 
     def test_declared_but_unreachable_free_rate_is_reported_flat(self):
         catalogue = SimpleNamespace(opportunities=(SimpleNamespace(id="unused", rate_group="unused"),))
-        states = (LocusState((0,), frozenset()), LocusState((1,), frozenset()))
+        states = (LocusState((0,)), LocusState((1,)))
         process = SimpleNamespace(catalogue=catalogue, states=states, edges=())
         tree = SpeciesTree([{"node_id": "tip", "parent_id": "", "label": "tip"}])
         unit = LocusFitUnit(process, tree, {"tip": [1.0, 1.0]}, [0.25, 0.75])

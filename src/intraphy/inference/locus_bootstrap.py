@@ -34,16 +34,13 @@ class LocusBootstrapResult:
 def validate_dna_bootstrap_design(bundle):
     """Validate fixed-catalogue DNA-only inputs without fitting or sampling.
 
-    Latent catalogue splice features are permitted. Tip feature/path
-    observations and feature-level detection metadata are not.
+    Only material calls and material detection metadata enter sampling.
     """
     raw_units = bundle.model_record.get("units", ())
     if len(raw_units) != len(bundle.units):
         raise ValueError("model record and compiled locus units differ in length")
-    empty_values = {
-        "features": {}, "surveyed_features": [], "sensitivity": {},
-        "specificity": {}, "observed_paths": [],
-    }
+    legacy_tip_fields = {"features", "surveyed_features", "sensitivity",
+                         "specificity", "observed_paths"}
     for unit, raw in zip(bundle.units, raw_units):
         if (raw.get("family"), raw.get("unit")) != (unit.family, unit.unit):
             raise ValueError("raw and compiled family/unit ordering does not match")
@@ -52,13 +49,17 @@ def validate_dna_bootstrap_design(bundle):
         compiled_material_ids = tuple(tract.id for tract in unit.process.catalogue.material)
         if raw_material_ids != compiled_material_ids:
             raise ValueError(f"raw and compiled material ID order differs for {unit.family}/{unit.unit}")
+        if raw.get("catalogue", {}).get("state_model") != unit.process.catalogue.state_model:
+            raise ValueError(f"raw and compiled state_model differ for {unit.family}/{unit.unit}")
+        if "features" in raw.get("catalogue", {}) or "mxe_groups" in raw.get("catalogue", {}):
+            raise ValueError("DNA-only bootstrap rejects catalogue feature fields")
         observations = raw["observations"]["tips"]
         if set(observations) != set(unit.tree.leaf_by_label):
             raise ValueError("raw observation tips do not match the fixed tree")
         for label, tip in observations.items():
-            for field, empty in empty_values.items():
-                if tip.get(field, empty) != empty:
-                    raise ValueError(f"DNA-only bootstrap requires empty tip field {field!r} ({label})")
+            legacy = set(tip) & legacy_tip_fields
+            if legacy:
+                raise ValueError(f"DNA-only bootstrap rejects tip feature/path field {sorted(legacy)[0]!r} ({label})")
 
 
 def _fit_rates(bundle):

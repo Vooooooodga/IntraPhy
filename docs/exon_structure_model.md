@@ -1,171 +1,95 @@
-# Exon-copy and splice-feature likelihood model
+# DNA-copy locus model
 
-## Biological question and scope
+## Biological object
 
-The model estimates event rates and reconstructs ancestral states for supplied
-exon-copy material and splice-feature availability along a rooted species tree. It is conditional on
-the topology, branch lengths, root distribution, homology catalogue, tip evidence
-and finite event-opportunity catalogue. It does not estimate transcript usage,
-RNA expression, protein abundance, selection, unrestricted copy birth or copy
-genealogy.
+The model represents homologous DNA-copy positions within a gene locus on a
+fixed rooted species tree. Genomic sequence and existing annotations identify
+candidate correspondence: exon and intron coordinates, boundaries, CDS phase,
+strand, and local order are evidence. They do not themselves define a gain or
+loss. One physical DNA interval is represented once even if several transcript
+records annotate it. Missing annotation, failed alignment, and ambiguous copy
+assignment are unknown observations; sequence-supported absence requires an
+explicitly adequate survey.
 
-## Model objects
+This engine estimates the DNA-copy component of intragenic evolution. Annotation
+boundaries and intron positions remain important mapping outputs, but are not
+separate latent event types in this process. It makes no claim about transcript
+use, splice availability, or alternative splicing.
 
-Each independent unit has a `LocusCatalogue` containing:
+## Catalogue and states
 
-- `MaterialTract`: one nonoverlapping segment on a shared ordered coordinate axis.
-- `CopySlot`: one labelled copy position, its material IDs, explicit homology and
-  collinearity links, orientation and evidence.
-- `SpliceFeature`: exon availability or a directed splice link. Exons require
-  material and a copy; splice links require two exon features and their endpoint
-  order. Prerequisites form a directed acyclic graph.
-- `EventOpportunity`: one event opportunity and its weighted alternative
-  outcomes, including material/feature preconditions, source and target copy,
-  and source-to-target feature mappings where required.
-- `mxe_groups`: feature sets whose alternatives constrain compatible paths.
+The strict input schema is `intraphy.exon-locus-model/2`. Each conditionally
+independent connected unit has ordered, nonoverlapping material tracts on a
+shared local coordinate axis and labelled copy positions supported by supplied
+homology evidence. Native chromosome coordinates require explicit mapping to
+that axis. Orientation and order are correspondence evidence; the model does
+not infer inversion events or copy genealogy.
 
-The latent state is the material lifecycle vector and the set of active
-availability features. Material states are 0 (not introduced), 1 (present), and
-2 (deleted). Feature availability is separate from DNA material. A sequence
-absence at a tip only establishes binary DNA absence; it does not identify
-whether the tract was never introduced or was deleted.
+Each catalogue declares one `state_model`:
 
-Write a state as $x=(m,a)$, where $m$ is the vector of material lifecycle
-values and $a$ is the set of available features. Along one lineage, deleted
-material (state 2) cannot be reintroduced: supplied duplication opportunities
-can change 0 to 1, and deletion opportunities can change 1 to 2.
+| State model | Values | Consequence after deletion |
+| --- | --- | --- |
+| `binary` | 0 absent, 1 present | A tract returns to 0; a later source-qualified duplication can restore presence. |
+| `irreversible` | 0 not introduced, 1 present, 2 deleted | A tract enters 2 and cannot regain presence on that lineage. |
 
-The process is compiled from the explicitly supplied root-state support. All
-states reachable under the declared opportunities are retained. There is no
-default state-count cap. The compiled space can grow rapidly with the number of
-copies, material segments, features and opportunities; full closure may require
-substantial memory and time.
+The irreversible state definition concerns a labelled position along a
+lineage. Different branches can independently introduce the same position, so
+the model does not impose a single origin over the tree. Binary regain still
+requires a present, qualified source; the full binary process need not be
+reversible. Tip presence means
+state 1. Tip absence is state 0 in the binary model and is compatible with 0 or
+2 in the irreversible model. Unknown tip calls impose no presence constraint.
+Known calls may use caller-supplied fixed sensitivity and specificity when the
+survey design supports them; these probabilities are not estimated from the
+same call.
 
-Material coordinates use one shared axis, increasing in transcriptional
-direction across the modeled units of a family. Inputs in different species'
-native chromosome coordinates are not automatically converted to that axis.
-Orientation and collinearity are recorded evidence metadata; inversion events
-are outside this process.
+The root distribution is supplied explicitly. The full set of states reachable
+from its support under the declared opportunities is compiled without an
+arbitrary state-count cap. Memory and computation can grow steeply with tract
+number and event coupling.
 
-## Event process
+## Events and likelihood
 
-The current typed events are:
+A `copy_duplication` opportunity names a qualified source and target position.
+Its source material must be present and target material eligible for gain under
+the selected state model. A `dna_deletion` opportunity covers one continuous
+interval and changes every intersecting present tract together. The event is
+counted once even when several tracts are lost. These typed events define a
+finite, conditional catalogue; opportunities not declared cannot occur in the
+fitted process. Catalogue qualification rests on sequence correspondence and
+independent annotation/context evidence, not on a favorable inferred history.
 
-1. **Copy duplication:** a supplied source copy can introduce a distinct target
-   slot only when their homology and evidence are declared, source material is
-   present, target material is unintroduced, and a feature map is supplied.
-2. **DNA deletion:** one continuous declared interval changes its present
-   material to deleted in one event. Dependent exon and splice features follow
-   the declared prerequisite cleanup.
-3. **Splice change:** context-specific feature availability changes while DNA
-   copy material remains present. Availability does not imply use.
+For distinct reachable states \(i,j\), the generator is
+\(q_{ij}=\sum_{e:i\to j} r_{g(e)}w_e\), summing rates of eligible declared
+event outcomes. The diagonal is minus the outgoing sum. Branch transitions are
+\(P(t)=\exp(Qt)\). Pruning sums over unobserved internal states and applies tip
+DNA emission probabilities to obtain the likelihood. Log likelihoods of
+declared independent units are summed. Overlapping tracts or coupled events
+belong in one unit.
 
-The finite opportunity catalogue defines the event process. Omitted events are
-unavailable in the fitted model. Alternative outcomes for one opportunity have
-weights summing to one. An opportunity applies only when its shared preconditions
-hold; partial applicability fails model compilation rather than redistributing
-weights. A no-change outcome keeps its probability mass and is not counted as a
-jump.
+Global rate groups can be fixed or estimated by nonnegative maximum likelihood.
+Branch lengths and their unit, tree topology, and root distribution are fixed
+inputs. Rate values depend on that branch-length scale and on the number of
+declared opportunities. Fit status, boundary estimates, and local curvature
+diagnostics describe the returned fit; they do not prove global optimality or
+identifiability. Conditional branch counts, requested by `--expected-edits`,
+count model transitions rather than individual molecular lesions.
 
-The model does not invent homology from transcript similarity, infer root states
-from the union of tip observations, or infer unrestricted duplication history.
-The Dscam-like example uses explicitly labelled synthetic alternatives. Primary
-studies report arthropod Dscam alternative splicing and copy diversification
-[Lee et al. 2010](https://doi.org/10.1261/rna.1812710); those results motivate a
-use case and do not establish any synthetic history.
+## Interpretation and limits
 
-## Likelihood and rates
+`locus_fit.json` contains likelihood and rate diagnostics. `locus_history.json`
+contains ancestral tract/copy DNA marginals and optional branch event counts.
+There are no feature, path, or splice-state marginals. Inference remains
+conditional on the supplied tree, root, homology and position hypotheses,
+survey design, opportunity catalogue, and independence of units. The method
+does not automatically correct for discovering the catalogue from the same
+observed loci or integrate unobserved extinct copy positions. A likelihood
+comparison across different codings or sampled loci requires a common
+observation space and explicit treatment of discovery; a larger raw likelihood
+alone is not evidence that one biological model is better.
 
-For each unit, a continuous-time Markov chain is evaluated on the supplied tree
-with sparse exponential actions and pruning. The root probability vector is
-explicit. Global rate-group labels tie opportunity intensities across units.
-Values marked `fit` provide positive starting values for nonnegative maximum
-likelihood; values marked `fixed` remain fixed. `--parameter-mode fixed` treats
-all declared values as fixed. No arbitrary upper rate bound is imposed.
-
-For distinct states $i\ne j$, the generator entry is
-$q_{ij}=\sum_e r_{g(e)}w_e$ over eligible declared events from $i$ to $j;
-diagonal entries are the negative outgoing rate. Here $r_{g(e)}$ is the
-rate-group intensity and $w_e$ the supplied outcome weight. Along a branch of
-length $t$, $P(t)=\exp(Qt)$. For unit $u$ on tree nodes $V$ and edges $B$, the
-likelihood is
-
-$$L_u=\sum_{x_V}\pi(x_{\mathrm{root}})
-\prod_{(p,c)\in B}P_{x_p,x_c}(t_{pc})
-\prod_{v\in\mathrm{tips}}E_v(x_v),$$
-
-where $\pi$ is the supplied root distribution and $E_v$ is the tip emission
-likelihood. Fitting maximizes $\sum_u\log L_u$ over declared free rate
-groups. Branch lengths and their units are fixed inputs.
-
-The branch-length unit is required in the model, as is provenance for the tree
-and branch-length basis. Rates have units of events per declared opportunity
-unit per tree branch-length unit. Tree scale and rate scale are confounded unless
-branch lengths and units are fixed as supplied. Fit diagnostics report optimizer
-status, boundary estimates and a local curvature/rank summary. These describe
-the fitted objective near the returned solution; they do not certify a global
-maximum or broad identifiability. Single-gene fits are allowed, with limited
-information exposed in those diagnostics.
-
-With `--expected-edits`, branch event counts are conditional on the fitted or
-fixed rates and observations. They count jumps in the supplied model, not
-molecular mutations. Marked count calculations can take substantially longer;
-the implementation does not derive p-values from these counts.
-
-## Tip observation model
-
-Each tree tip has a binary material presence vector with values 0, 1 or unknown. A
-present call constrains latent material to state 1. An absent call permits latent
-state 0 or 2. Unknown material contributes no discrimination. Feature values
-record evidence about availability. Positive observations support availability;
-negative observations constrain it only where the feature was surveyed. A
-missing feature record is unknown. Optional sensitivity and specificity apply
-only to features explicitly surveyed at that tip; without those parameters the
-observation is a hard compatibility constraint. Surveyed-feature detection
-factors are conditionally independent given the latent state.
-
-Optional observed transcript paths record ordered exon-feature paths and their
-connected splice links. Multiple paths may coexist at a tip. The model does not
-enumerate every path allowed by a state or estimate usage/frequency weights.
-Alternative MXE features can remain simultaneously available where no observed
-path requires both alternatives.
-
-## Input and output
-
-The strict JSON schema is `intraphy.exon-locus-model/1`. It records catalogue
-objects, root distribution, observation provenance, global rate groups,
-conditional independence scope, model provenance, branch-length unit and tree
-provenance. The CLI accepts rooted species trees as TSV or Newick. Every nonroot
-branch needs a finite nonnegative length; the exact input tree remains fixed.
-
-`locus_fit.json` records log likelihoods, fitted rates, optimizer status,
-iterations, boundary groups, curvature diagnostics, workers and rate/tree/unit
-provenance. `locus_history.json` records reachable states, node marginals for
-material lifecycle, complete copy-material retention (`copy_intact`), and
-feature availability, plus the opportunity
-records. When `--expected-edits` is selected, it also records expected branch
-event counts by opportunity and rate group. Marginals are conditional on all
-declared inputs.
-
-The declared units are assumed conditionally independent given shared global
-rates. This assumption and its provenance are stored with the analysis. IntraPhy
-does not infer independence from the number of genes; overlapping material or
-event support should be represented in one connected unit.
-
-The likelihood is conditional on the supplied catalogue and observed loci. It
-does not generally correct for catalogue discovery/ascertainment or integrate
-unobserved extinct copy positions. Labelled copy slots encode supplied position
-and homology hypotheses, not a reconstructed copy genealogy; a branch-homogeneous
-process permits the same target slot to arise independently on separate
-lineages. Availability alone does not imply transcript usage or full-length
-isoform frequency.
-
-## Numerical implementation references
-
-The likelihood uses SciPy's sparse matrix-exponential action
-[`expm_multiply`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.linalg.expm_multiply.html),
-which computes the action of a matrix exponential on a vector without requiring
-an explicitly materialized transition matrix. The phylogenetic maximum
-likelihood framework follows established software practice described by
-[HyPhy 2.5](https://doi.org/10.1093/molbev/msz197); this citation is methodological
-context, not a claim of using HyPhy code.
+The likelihood is an application of established discrete-state phylogenetic
+methods. [Malin](https://doi.org/10.1093/bioinformatics/btn226) applies
+maximum likelihood to corresponding intron positions; the
+[ExOrthist](https://doi.org/10.1186/s13059-021-02441-9) framework motivates
+using exon sequence and genomic context when establishing correspondence.

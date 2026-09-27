@@ -16,7 +16,7 @@ def _unit(tips=None):
         opportunities=(SimpleNamespace(id="del", rate_group="deletion"),))
     process = SimpleNamespace(
         catalogue=catalogue,
-        states=(LocusState((2,), frozenset()), LocusState((1,), frozenset())),
+        states=(LocusState((2,)), LocusState((1,))),
         edges=(ProcessEdge(1, 0, "del", "delete", "dna_deletion", "deletion", 1.0),),
     )
     tree = SpeciesTree([

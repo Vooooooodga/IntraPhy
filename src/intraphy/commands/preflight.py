@@ -39,7 +39,7 @@ def validate_arguments(args):
         return
     if getattr(args, "model", None) == "exon-locus-ctmc":
         if not getattr(args, "locus_model", None):
-            raise ValueError("The default exon-locus-ctmc model requires --locus-model with a qualified intraphy.exon-locus-model/1 record.")
+            raise ValueError("The default exon-locus-ctmc model requires --locus-model with a qualified intraphy.exon-locus-model/2 DNA record.")
         if not getattr(args, "species_tree", None):
             raise ValueError("The exon-locus-ctmc model requires --species-tree (rooted Newick or TSV).")
         if getattr(args, "exon_configurations", None) or getattr(args, "exon_rates", None):

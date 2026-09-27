@@ -33,7 +33,7 @@ class _Comparison:
 
 def _model():
     return {
-        "schema": "intraphy.exon-locus-model/1", "model": "exon-locus-ctmc",
+        "schema": "intraphy.exon-locus-model/2", "model": "exon-locus-ctmc",
         "branch_length_unit": "declared opportunity units",
         "tree_provenance": "test tree", "provenance": "test model",
         "independence_provenance": "one locus unit",
@@ -43,18 +43,18 @@ def _model():
             "family": "family", "unit": "relay",
             "catalogue": {
                 "provenance": "candidate catalogue",
+                "state_model": "irreversible",
                 "material": [{"id": "copy_A", "start": 10, "end": 20}],
                 "copies": [{"id": "A", "material_ids": ["copy_A"]}],
-                "features": [],
                 "opportunities": [{"id": "delete_A", "outcome_id": "delete",
                                    "kind": "dna_deletion", "rate_group": "deletion",
                                    "material_deletions": ["copy_A"], "interval": [10, 20]}],
             },
             "root": {"provenance": "declared root", "entries": [
-                {"state": {"material": [1], "active_features": []}, "weight": 1.0}]},
+                {"state": {"material": [1]}, "weight": 1.0}]},
             "observations": {"provenance": "template calls", "tips": {
-                "A": {"material": [None], "features": {}},
-                "B": {"material": [None], "features": {}},
+                "A": {"material": [None]},
+                "B": {"material": [None]},
             }},
         }],
     }
@@ -146,8 +146,7 @@ class LocusStatisticsCommandTests(unittest.TestCase):
             result = json.loads((output / "run_result.json").read_text(encoding="utf-8"))
             self.assertEqual(saved["units"][0]["observations"]["tips"]["A"]["material_sensitivity"],
                              {"copy_A": 0.98})
-            self.assertEqual(saved["units"][0]["observations"]["tips"]["A"]["features"],
-                             {})
+            self.assertNotIn("features", saved["units"][0]["observations"]["tips"]["A"])
             self.assertEqual(result["artifacts"], ["locus_model.json", "species_tree.tsv"])
 
     def test_cli_routes_both_commands_to_the_new_dispatchers(self):

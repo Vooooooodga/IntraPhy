@@ -11,8 +11,8 @@ from intraphy.structure.locus_types import (
 def _fixture():
     material = (MaterialTract("copy_A", 0, 10), MaterialTract("copy_B", 10, 20))
     copies = (CopySlot("A", ("copy_A",)), CopySlot("B", ("copy_B",)))
-    catalogue = LocusCatalogue(material, copies, (), (), provenance="detection fixture")
-    states = tuple(LocusState(values, frozenset()) for values in (
+    catalogue = LocusCatalogue(material, copies, (), provenance="detection fixture")
+    states = tuple(LocusState(values) for values in (
         (0, 0), (0, 1), (1, 0), (1, 1), (2, 0), (2, 1)))
     return catalogue, states
 

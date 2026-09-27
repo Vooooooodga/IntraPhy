@@ -9,6 +9,7 @@ import numpy as np
 from scipy.sparse import coo_matrix, bmat, csr_matrix
 from scipy.sparse.linalg import expm_multiply
 from intraphy.structure.locus_observations import observation_emission
+from intraphy.structure.locus_types import LocusObservation
 
 
 @dataclass(frozen=True)
@@ -55,10 +56,11 @@ def process_generator(process, rates: Mapping[str, float]) -> csr_matrix:
     return q
 
 
-def _vector(process, value, name, sensitivity=None, specificity=None, allow_zero=False):
-    if hasattr(value, "material") and hasattr(value, "features"):
+def _vector(process, value, name, material_sensitivity=None, material_specificity=None, allow_zero=False):
+    if isinstance(value, LocusObservation):
         result = observation_emission(process.catalogue, process.states, value,
-                                      sensitivity=sensitivity, specificity=specificity)
+                                      material_sensitivity=material_sensitivity,
+                                      material_specificity=material_specificity)
     else:
         result = np.asarray(value, dtype=float)
     if result.shape != (len(process.states),) or not np.all(np.isfinite(result)) or np.any(result < 0):
@@ -91,7 +93,7 @@ def _action(matrix, vector, branch_length):
 
 def evaluate_locus(process, tree, tips: Mapping[str, object], root_prior,
                    rates: Mapping[str, float], *, posterior=True, counts=False,
-                   feature_sensitivity=None, feature_specificity=None):
+                   material_sensitivity=None, material_specificity=None):
     """Evaluate one connected locus by sparse-vector pruning.
 
     Tip values may be LocusObservation objects or explicit emission vectors.
@@ -116,7 +118,7 @@ def evaluate_locus(process, tree, tips: Mapping[str, object], root_prior,
         label = tree.label[node]
         raw = tips[label]
         emissions[node], emission_scales[node] = _vector(
-            process, raw, f"tip {label!r}", feature_sensitivity, feature_specificity,
+            process, raw, f"tip {label!r}", material_sensitivity, material_specificity,
             allow_zero=True)
         if not np.any(emissions[node]):
             return LocusLikelihoodResult(-math.inf, None, None)

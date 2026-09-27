@@ -5,7 +5,7 @@ import math
 
 
 def add_locus_statistics_commands(sub):
-    stats = sub.add_parser("locus-statistics", help="Compare declared locus-rate groups conditionally.")
+    stats = sub.add_parser("locus-statistics", help="Compare declared genomic DNA-copy rate groups conditionally.")
     stats.add_argument("--locus-model", required=True)
     stats.add_argument("--species-tree", required=True)
     stats.add_argument("--output-dir", required=True)
@@ -21,7 +21,7 @@ def add_locus_statistics_commands(sub):
     stats.set_defaults(model="exon-locus-ctmc")
 
     prepare = sub.add_parser("prepare-locus-evidence", help="Apply a complete tip-by-material DNA evidence table.")
-    prepare.add_argument("--locus-model", required=True, help="Template exon-locus JSON model.")
+    prepare.add_argument("--locus-model", required=True, help="Template DNA-only exon-locus JSON model /2.")
     prepare.add_argument("--species-tree", required=True)
     prepare.add_argument("--evidence-json", required=True, help="JSON array of complete per-tip material evidence rows.")
     prepare.add_argument("--output-dir", required=True)

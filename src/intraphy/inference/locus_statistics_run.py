@@ -83,10 +83,17 @@ def run_locus_statistics(bundle, output_dir, *, null_rate_groups,
         failure_reasons.append(f"bootstrap:{bootstrap.status}")
 
     payload = {
-        "schema": "intraphy.locus-statistics/1",
+        "schema": "intraphy.locus-statistics/2",
         "status": "completed" if status_ok else "failed",
         "model": "exon-locus-ctmc",
-        "analysis_scope": "conditional rate comparison for supplied connected-locus units",
+        "analysis_scope": "conditional rate comparison for supplied genomic DNA copy units",
+        "state_models": {f"{unit.family}/{unit.unit}": unit.process.catalogue.state_model
+                         for unit in bundle.units},
+        "material_state_semantics": {
+            f"{unit.family}/{unit.unit}": ({"0": "absent", "1": "present"}
+                                         if unit.process.catalogue.state_model == "binary" else
+                                         {"0": "unintroduced", "1": "present", "2": "deleted"})
+            for unit in bundle.units},
         "model_record": bundle.model_record,
         "tree": list(bundle.tree_rows),
         "tree_provenance": bundle.tree_provenance,

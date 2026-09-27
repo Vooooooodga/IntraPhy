@@ -37,9 +37,11 @@ def apply_material_evidence(model_record, rows):
     probabilities are optional fixed caller-supplied values; this function
     never estimates them or infers homology, roots, or event opportunities.
     Existing DNA observation/detection fields are replaced from the complete
-    table, while feature observations and all other model records are retained.
+    table; all supplied catalogue, tree, rate, and root records are retained.
     """
-    if not isinstance(model_record, dict) or not isinstance(model_record.get("units"), list):
+    if isinstance(model_record, dict) and model_record.get("schema") == "intraphy.exon-locus-model/1":
+        raise ValueError("Schema /1 includes splice and transcript-path state; supply a DNA-only intraphy.exon-locus-model/2 record")
+    if not isinstance(model_record, dict) or model_record.get("schema") != "intraphy.exon-locus-model/2" or not isinstance(model_record.get("units"), list):
         raise ValueError("model_record must contain a units array")
     result = deepcopy(model_record)
     expected = {}
@@ -57,6 +59,8 @@ def apply_material_evidence(model_record, rows):
         observations = unit.get("observations")
         if not isinstance(catalogue, dict) or not isinstance(catalogue.get("material"), list):
             raise ValueError(f"Unit {family}/{unit_id} requires a catalogue material array")
+        if set(catalogue) != {"provenance", "state_model", "material", "copies", "opportunities"}:
+            raise ValueError(f"Unit {family}/{unit_id} requires a DNA-only /2 catalogue")
         material_ids = [_text(item.get("id"), "material id")
                         for item in catalogue["material"] if isinstance(item, dict)]
         if len(material_ids) != len(catalogue["material"]) or len(set(material_ids)) != len(material_ids):
@@ -67,6 +71,8 @@ def apply_material_evidence(model_record, rows):
             tip = _text(tip, "tip id")
             if not isinstance(tip_record, dict) or not isinstance(tip_record.get("material"), list):
                 raise ValueError(f"Tip {tip!r} requires a material observation array")
+            if set(tip_record) - set(_DNA_FIELDS) - {"material"}:
+                raise ValueError(f"Tip {tip!r} contains unsupported non-DNA observations")
             if len(tip_record["material"]) != len(material_ids):
                 raise ValueError(f"Tip {tip!r} material vector does not match its catalogue")
             expected[(family, unit_id, tip)] = material_ids

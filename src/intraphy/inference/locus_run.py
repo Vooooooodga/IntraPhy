@@ -1,4 +1,4 @@
-"""Run and serialize finite evidence-conditioned exon-locus histories."""
+"""Run and serialize finite evidence-conditioned genomic copy histories."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -14,7 +14,6 @@ from .locus_rates import fit_locus_rates
 def _state_record(state, catalogue):
     return {
         "material": {tract.id: state.material[i] for i, tract in enumerate(catalogue.material)},
-        "active_features": sorted(state.active_features),
     }
 
 
@@ -27,17 +26,14 @@ def _node_marginals(process, posterior):
         for i, tract in enumerate(catalogue.material):
             material[tract.id] = {str(status): float(sum(values[j] for j, state in enumerate(process.states)
                                                           if state.material[i] == status))
-                                  for status in (0, 1, 2)}
-        features = {feature.id: float(sum(values[j] for j, state in enumerate(process.states)
-                                         if feature.id in state.active_features))
-                    for feature in catalogue.features}
+                                  for status in catalogue.material_states}
         copies = {copy.id: float(sum(values[j] for j, state in enumerate(process.states)
                                     if all(state.material[next(k for k, tract in enumerate(catalogue.material)
                                                                if tract.id == material_id)] == 1
                                            for material_id in copy.material_ids)))
                   for copy in catalogue.copies}
-        rows.append({"node_id": node_id, "material_lifecycle": material,
-                     "copy_intact": copies, "feature_available": features})
+        rows.append({"node_id": node_id, "material_state": material,
+                     "copy_intact": copies})
     return rows
 
 
@@ -59,7 +55,7 @@ def _fit_record(result, mode, bundle):
     else:
         parameter_status = "converged_local_solution"
     return {
-        "schema": "intraphy.exon-locus-fit/1", "model": "exon-locus-ctmc",
+        "schema": "intraphy.exon-locus-fit/2", "model": "exon-locus-ctmc",
         "parameter_mode": mode, "log_likelihood_initial": result.initial_log_likelihood,
         "log_likelihood_fitted": result.fitted_log_likelihood,
         "optimizer_success": result.optimizer_success, "optimizer_status": result.optimizer_status,
@@ -76,8 +72,10 @@ def _fit_record(result, mode, bundle):
         "rate_provenance": bundle.rate_provenance,
         "branch_length_unit": bundle.branch_length_unit,
         "conditional_independence_provenance": bundle.independence_provenance,
+        "state_models": {f"{unit.family}/{unit.unit}": unit.process.catalogue.state_model
+                         for unit in bundle.units},
         "parameter_status": parameter_status,
-        "scope": "conditional on the supplied finite event catalogue, fixed tree, and declared independent units",
+        "scope": "genomic DNA material and copy histories conditional on labelled positions, supplied finite opportunities, root distributions, fixed tree, and declared independent units",
         "model_specification": bundle.model_record,
         "tree": list(bundle.tree_rows),
         "tree_provenance": bundle.tree_provenance,
@@ -125,6 +123,10 @@ def analyze_locus(bundle, output_dir, *, parameter_mode="fit", expected_counts=F
                                  "expected_event_counts": dict(counts)})
         units.append({
             "family": unit.family, "unit": unit.unit,
+            "state_model": catalogue.state_model,
+            "material_state_semantics": ({"0": "absent", "1": "present"}
+                                         if catalogue.state_model == "binary" else
+                                         {"0": "unintroduced", "1": "present", "2": "deleted"}),
             "state_count": len(unit.process.states),
             "states": [_state_record(state, catalogue) for state in unit.process.states],
             "root_distribution": {str(i): float(value) for i, value in enumerate(unit.root_prior) if value > 0},
@@ -140,7 +142,7 @@ def analyze_locus(bundle, output_dir, *, parameter_mode="fit", expected_counts=F
             "catalogue_provenance": catalogue.provenance,
         })
     history = {
-        "schema": "intraphy.exon-locus-history/1", "model": "exon-locus-ctmc",
+        "schema": "intraphy.exon-locus-history/2", "model": "exon-locus-ctmc",
         "status": "completed", "parameter_mode": parameter_mode,
         "parameter_status": _fit_record(fit, parameter_mode, bundle)["parameter_status"],
         "log_likelihood": fit.fitted_log_likelihood,

@@ -1,16 +1,15 @@
 {
-  "schema": "intraphy.exon-locus-model/1",
+  "schema": "intraphy.exon-locus-model/2",
   "model": "exon-locus-ctmc",
   "branch_length_unit": "substitutions_per_site",
-  "tree_provenance": "Synthetic rooted two-tip tree; branch lengths are illustrative substitutions per site.",
-  "provenance": "Synthetic Dscam-like teaching model. Copy homology, feature links, and event opportunities are declared for illustration and do not represent an empirical locus.",
-  "independence_provenance": "One connected synthetic locus is analyzed as a single unit; no cross-unit independence assumption is used.",
+  "tree_provenance": "Synthetic rooted two-tip tree; branch lengths are illustrative.",
+  "provenance": "Synthetic Dscam-like DNA-copy teaching model. Labelled homology and event direction are illustrative, not empirical conclusions.",
+  "independence_provenance": "One connected synthetic locus is one unit.",
   "rates": {
-    "provenance": "Illustrative positive starting values for the synthetic example; they are not empirical rate estimates.",
+    "provenance": "Illustrative rates, not empirical estimates.",
     "groups": {
       "copy_duplication": {"mode": "fit", "initial": 0.2},
-      "dna_deletion": {"mode": "fit", "initial": 0.05},
-      "splice_change": {"mode": "fixed", "value": 0.1}
+      "dna_deletion": {"mode": "fit", "initial": 0.05}
     }
   },
   "units": [
@@ -18,73 +17,41 @@
       "family": "synthetic_dscam_like",
       "unit": "one_connected_locus",
       "catalogue": {
-        "provenance": "Synthetic ordered coordinates with two explicitly labelled homologous copy positions and alternative exon features.",
+        "provenance": "Synthetic coordinate axis with explicit source and homologous target copy slots.",
+        "state_model": "irreversible",
         "material": [
-          {"id": "src_0", "start": 0, "end": 5, "evidence": ["synthetic source slot"]},
-          {"id": "src_x", "start": 10, "end": 15, "evidence": ["synthetic source slot"]},
-          {"id": "src_y", "start": 20, "end": 25, "evidence": ["synthetic source slot"]},
-          {"id": "src_3", "start": 30, "end": 35, "evidence": ["synthetic source slot"]},
-          {"id": "dup_0", "start": 100, "end": 105, "evidence": ["synthetic target slot"]},
-          {"id": "dup_x", "start": 110, "end": 115, "evidence": ["synthetic target slot"]},
-          {"id": "dup_y", "start": 120, "end": 125, "evidence": ["synthetic target slot"]},
-          {"id": "dup_3", "start": 130, "end": 135, "evidence": ["synthetic target slot"]}
+          {"id": "source_dna", "start": 0, "end": 20, "evidence": ["synthetic source interval"]},
+          {"id": "target_dna", "start": 100, "end": 120, "evidence": ["synthetic target interval"]}
         ],
         "copies": [
-          {"id": "source_copy", "material_ids": ["src_0", "src_x", "src_y", "src_3"], "evidence": ["synthetic homology hypothesis"]},
-          {"id": "target_copy", "material_ids": ["dup_0", "dup_x", "dup_y", "dup_3"], "homologous_to": ["source_copy"], "evidence": ["synthetic homology hypothesis"]}
+          {"id": "source_copy", "material_ids": ["source_dna"], "evidence": ["synthetic source assignment"]},
+          {"id": "target_copy", "material_ids": ["target_dna"], "homologous_to": ["source_copy"], "evidence": ["synthetic homology hypothesis"]}
         ],
-        "features": [
-          {"id": "s0", "kind": "exon", "copy_id": "source_copy", "start": 0, "end": 5, "required_material": ["src_0"], "evidence": ["synthetic exon"]},
-          {"id": "sx", "kind": "exon", "copy_id": "source_copy", "start": 10, "end": 15, "required_material": ["src_x"], "mxe_group": "source_variable", "evidence": ["synthetic alternative exon"]},
-          {"id": "sy", "kind": "exon", "copy_id": "source_copy", "start": 20, "end": 25, "required_material": ["src_y"], "mxe_group": "source_variable", "evidence": ["synthetic alternative exon"]},
-          {"id": "s3", "kind": "exon", "copy_id": "source_copy", "start": 30, "end": 35, "required_material": ["src_3"], "evidence": ["synthetic exon"]},
-          {"id": "s0x", "kind": "splice", "copy_id": "source_copy", "prerequisites": ["s0", "sx"], "donor": 5, "acceptor": 10, "evidence": ["synthetic splice link"]},
-          {"id": "sx3", "kind": "splice", "copy_id": "source_copy", "prerequisites": ["sx", "s3"], "donor": 15, "acceptor": 30, "evidence": ["synthetic splice link"]},
-          {"id": "s0y", "kind": "splice", "copy_id": "source_copy", "prerequisites": ["s0", "sy"], "donor": 5, "acceptor": 20, "evidence": ["synthetic splice link"]},
-          {"id": "sy3", "kind": "splice", "copy_id": "source_copy", "prerequisites": ["sy", "s3"], "donor": 25, "acceptor": 30, "evidence": ["synthetic splice link"]},
-          {"id": "t0", "kind": "exon", "copy_id": "target_copy", "start": 100, "end": 105, "required_material": ["dup_0"], "evidence": ["synthetic duplicated feature"]},
-          {"id": "tx", "kind": "exon", "copy_id": "target_copy", "start": 110, "end": 115, "required_material": ["dup_x"], "mxe_group": "target_variable", "evidence": ["synthetic duplicated alternative"]},
-          {"id": "ty", "kind": "exon", "copy_id": "target_copy", "start": 120, "end": 125, "required_material": ["dup_y"], "mxe_group": "target_variable", "evidence": ["synthetic duplicated alternative"]},
-          {"id": "t3", "kind": "exon", "copy_id": "target_copy", "start": 130, "end": 135, "required_material": ["dup_3"], "evidence": ["synthetic duplicated feature"]},
-          {"id": "t0x", "kind": "splice", "copy_id": "target_copy", "prerequisites": ["t0", "tx"], "donor": 105, "acceptor": 110, "evidence": ["synthetic duplicated splice link"]},
-          {"id": "tx3", "kind": "splice", "copy_id": "target_copy", "prerequisites": ["tx", "t3"], "donor": 115, "acceptor": 130, "evidence": ["synthetic duplicated splice link"]},
-          {"id": "t0y", "kind": "splice", "copy_id": "target_copy", "prerequisites": ["t0", "ty"], "donor": 105, "acceptor": 120, "evidence": ["synthetic duplicated splice link"]},
-          {"id": "ty3", "kind": "splice", "copy_id": "target_copy", "prerequisites": ["ty", "t3"], "donor": 125, "acceptor": 130, "evidence": ["synthetic duplicated splice link"]}
-        ],
-        "mxe_groups": {
-          "source_variable": ["sx", "sy"],
-          "target_variable": ["tx", "ty"]
-        },
         "opportunities": [
           {
-            "id": "source_to_target_duplication", "outcome_id": "duplicate", "kind": "copy_duplication", "rate_group": "copy_duplication",
-            "preconditions": [["src_0", 1], ["src_x", 1], ["src_y", 1], ["src_3", 1], ["dup_0", 0], ["dup_x", 0], ["dup_y", 0], ["dup_3", 0]],
-            "material_gains": ["dup_0", "dup_x", "dup_y", "dup_3"],
-            "source_copy": "source_copy", "target_copy": "target_copy",
-            "feature_map": [["s0", "t0"], ["sx", "tx"], ["sy", "ty"], ["s3", "t3"], ["s0x", "t0x"], ["sx3", "tx3"], ["s0y", "t0y"], ["sy3", "ty3"]]
+            "id": "source_to_target_duplication", "outcome_id": "duplicate",
+            "kind": "copy_duplication", "rate_group": "copy_duplication",
+            "preconditions": [["source_dna", 1], ["target_dna", 0]],
+            "material_gains": ["target_dna"],
+            "source_copy": "source_copy", "target_copy": "target_copy"
           },
           {
-            "id": "target_copy_deletion", "outcome_id": "delete_interval", "kind": "dna_deletion", "rate_group": "dna_deletion",
-            "preconditions": [["dup_0", 1], ["dup_x", 1], ["dup_y", 1], ["dup_3", 1]],
-            "material_deletions": ["dup_0", "dup_x", "dup_y", "dup_3"], "interval": [100, 135]
-          },
-          {
-            "id": "source_splice_context_change", "outcome_id": "disable_link", "kind": "splice_change", "rate_group": "splice_change",
-            "context_features": ["s0", "sx"], "feature_off": ["s0x"]
+            "id": "target_deletion", "outcome_id": "delete_target",
+            "kind": "dna_deletion", "rate_group": "dna_deletion",
+            "preconditions": [["target_dna", 1]],
+            "material_deletions": ["target_dna"], "interval": [100, 120]
           }
         ]
       },
       "root": {
-        "provenance": "Explicit synthetic root distribution with the source copy present and target copy unintroduced.",
-        "entries": [
-          {"state": {"material": [1, 1, 1, 1, 0, 0, 0, 0], "active_features": ["s0", "sx", "sy", "s3", "s0x", "sx3", "s0y", "sy3"]}, "weight": 1.0}
-        ]
+        "provenance": "Explicit synthetic root: source DNA present and target DNA unintroduced.",
+        "entries": [{"state": {"material": [1, 0]}, "weight": 1.0}]
       },
       "observations": {
-        "provenance": "Synthetic tip calls and two example transcript paths; feature availability is not usage frequency.",
+        "provenance": "Synthetic genomic DNA calls at two tips.",
         "tips": {
-          "Species_A": {"material": [1, 1, 1, 1, 1, 1, 1, 1], "observed_paths": [["t0", "tx", "t3"]]},
-          "Species_B": {"material": [1, 1, 1, 1, 0, 0, 0, 0], "observed_paths": [["s0", "sy", "s3"]]}
+          "Species_A": {"material": [1, 1]},
+          "Species_B": {"material": [1, 0]}
         }
       }
     }
