@@ -77,7 +77,10 @@ class LocusCommandTests(unittest.TestCase):
     def test_required_locus_inputs_and_thread_count_are_preflighted(self):
         parser = build_parser()
         for command in ("analyze", "run", "infer-phylogeny"):
-            args = parser.parse_args([command, "--output-dir", "out"])
+            missing_model_args = [command, "--output-dir", "out"]
+            if command == "analyze":
+                missing_model_args.extend(["--model", "exon-locus-ctmc"])
+            args = parser.parse_args(missing_model_args)
             with self.subTest(command=command, missing="model"):
                 with self.assertRaisesRegex(ValueError, "requires --locus-model"):
                     validate_arguments(args)

@@ -24,6 +24,10 @@ from .workflow import run_all, _record_evidence_aligner
 
 
 def _dispatch(args):
+    if args.command == "prepare-genomic-evidence":
+        from .commands.genomic import dispatch_prepare_evidence
+        dispatch_prepare_evidence(args)
+        return
     if args.command in {"locus-statistics", "prepare-locus-evidence"}:
         from .commands.locus_statistics import (
             dispatch_locus_statistics, dispatch_prepare_locus_evidence,
@@ -50,6 +54,9 @@ def _dispatch(args):
         if args.model == "exon-locus-ctmc":
             from .commands.locus import dispatch_locus
             dispatch_locus(args)
+        elif args.model == "dna-presence-ctmc":
+            from .commands.genomic import dispatch_analyze
+            dispatch_analyze(args)
         else:
             from .commands.exons import dispatch_analyze
             dispatch_analyze(args)
@@ -124,6 +131,8 @@ def _dispatch(args):
         model_name = str(result_model(args.result_dir))
         if model_name == "exon-locus-ctmc":
             raise ValueError("The exon-locus-ctmc result currently provides auditable JSON posterior and event-count outputs; no locus-specific graphic renderer is available.")
+        if model_name == "dna-presence-ctmc":
+            raise ValueError("The dna-presence-ctmc result contains DNA presence histories; no structural graphic renderer is available.")
         if model_name.startswith("exon-"):
             from .reporting.exon_results import render_exon_results
             render_exon_results(args.result_dir, args.output_dir)

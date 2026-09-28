@@ -11,15 +11,14 @@ intraphy check --fasta genomes --gff annotations \
 intraphy build-case --fasta genomes --gff annotations \
   --orthologs families --species-tree tree.nwk \
   --output-dir prepared_case --threads 8
-intraphy derive-tables --input-dir prepared_case \
-  --output-dir correspondence_tables --threads 8
 ```
 
 The `--orthologs` selection is needed when annotations contain multiple
 genes; it does not itself establish orthology. Omit it for inputs containing
 exactly one selected gene locus per species. `check` resolves identifiers,
-tree tips, and coordinate bounds. `build-case` prepares loci and annotation
-evidence. `derive-tables` calculates correspondence information. See
+tree tips, and coordinate bounds. `build-case` prepares loci and correspondence
+evidence. Run `derive-tables` separately only when recomputing tables into
+another output directory. See
 [genomic input contracts](inputs.md) for file naming, compressed input,
 coordinate handling, and optional `extract-loci`.
 
@@ -28,7 +27,53 @@ transcript records covering the same DNA must be deduplicated by physical
 interval when defining copy units. Lack of an annotation alone does not
 establish DNA absence. Ambiguous alignment or unsurveyed sequence is unknown.
 
-## Qualified DNA-copy model
+## Automatic DNA-presence histories
+
+```bash
+intraphy analyze --fasta genomes --gff annotations \
+  --orthologs families --species-tree tree.nwk --output-dir dna_result
+```
+
+The genomic-input default is `dna-presence-ctmc`. It infers binary presence
+histories for qualified cross-species position-homology groups, with family-
+shared gain and loss rates and an observed-at-least-one ascertainment condition.
+Unqualified candidates and failed/over-budget surveys remain `unknown`; a
+second optimal placement is ambiguous and also remains unknown. The bounded
+survey covers selected sequence pairs, not genome-wide search space. The
+default root distribution is stationary;
+`--root-frequency fixed --root-presence P` supplies a fixed root presence
+probability. `--dna-gain-rate` and `--dna-loss-rate` must be supplied together
+to evaluate fixed rates. Rates use the branch-length units of the supplied
+rooted tree, whose non-root branches must have explicit lengths. `--expected-edits`
+optionally reports conditional transition counts.
+
+The histories describe DNA-position presence gains and losses. They do not
+infer a duplication source or molecular mechanism. Annotation exon/intron
+boundaries remain descriptors, and DNA presence alone cannot identify intron-
+loss exon fusion, boundary shifts, or exonization when homologous DNA remains.
+No transcript usage or complete intragenic-structure history is inferred.
+
+For staged reuse:
+
+```bash
+intraphy prepare-genomic-evidence --input-dir prepared_case \
+  --output-dir dna_evidence --threads 8
+intraphy analyze --input-dir prepared_case --genomic-evidence-dir dna_evidence \
+  --output-dir dna_result
+```
+
+Reuse checks the prepared physical-site/member catalogue, genome resource paths,
+tree tip panel, survey thresholds, and evidence schema. It does not repeat the
+alignment survey; preserve and review staged evidence and its source files.
+
+[Glick et al. 2024](https://doi.org/10.1093/molbev/msae248) analyze species-level structural summaries,
+whereas this workflow models qualified per-site observations. Binary intron-position reconstruction such as
+[Csűrös et al. 2011](https://doi.org/10.1371/journal.pcbi.1002150) and homologous exon/domain structure comparison such as
+[ExonEvo](https://doi.org/10.1038/s41467-025-66816-3) provide related
+methodological context, not validation of this observation process or event
+interpretation.
+
+## Advanced source-directed DNA-copy model
 
 ```bash
 intraphy analyze --locus-model model.json \
@@ -60,6 +105,6 @@ sensitivity/specificity, if supplied, are fixed input probabilities.
 an optional fixed-catalogue DNA bootstrap. See
 [conditional statistics](locus_statistics.md).
 
-Other command routes retained in the package serve separate historical or
-experimental analyses. They do not supply the qualified DNA-copy catalogue or
+Additional command routes implement separate experimental analyses. They do
+not supply the qualified DNA-copy catalogue or
 extend the current locus model to intron-boundary evolution.

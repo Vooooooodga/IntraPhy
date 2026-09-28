@@ -4,14 +4,24 @@ from intraphy import __version__
 from intraphy.verification.calibration import DEFAULT_SCENARIOS
 def build_parser():
     parser = argparse.ArgumentParser(
-        prog="intraphy", description="Infer genomic DNA-copy histories on a supplied rooted species tree and labelled homology catalogue.",
-        epilog="Primary workflow: analyze --locus-model MODEL --species-tree TREE. Genomic preparation remains available with build-case. See docs/quickstart.md.",
+        prog="intraphy", description="Infer genomic DNA-presence histories on a supplied rooted species tree.",
+        epilog="Primary workflow: analyze --fasta GENOMES --gff ANNOTATIONS --species-tree TREE. Advanced labelled-copy inference uses --locus-model. See docs/quickstart.md.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
     from .exons import add_exon_commands, add_configuration_options
     add_exon_commands(sub)
+    from .exons import add_dna_observation_options
+    prepare_dna = sub.add_parser(
+        "prepare-genomic-evidence",
+        help="Derive qualified DNA position-homology observations from prepared genomic inputs.",
+    )
+    prepare_dna.add_argument("--input-dir", required=True,
+                             help="Prepared build-case directory, optionally already containing derive-tables outputs.")
+    prepare_dna.add_argument("--output-dir", required=True)
+    prepare_dna.add_argument("--threads", type=int, default=1)
+    add_dna_observation_options(prepare_dna)
     from .repertoires import add_repertoire_commands
     add_repertoire_commands(sub)
     from .locus_statistics import add_locus_statistics_commands
@@ -305,7 +315,7 @@ def build_parser():
         command.formatter_class = argparse.ArgumentDefaultsHelpFormatter
         command.add_argument("--quiet", action="store_true", help="Suppress console progress; retain logs.")
         command.add_argument("--debug", action="store_true", help="Show a Python traceback on errors.")
-    for name in ("build-case", "run", "infer-phylogeny", "visualize", "import-orthofinder", "extract-loci", "normalize-annotation", "explain", "analyze", "fit-exon-rates"):
+    for name in ("build-case", "run", "infer-phylogeny", "visualize", "import-orthofinder", "extract-loci", "normalize-annotation", "explain", "analyze", "prepare-genomic-evidence", "fit-exon-rates"):
         sub.choices[name].add_argument("--force", action="store_true",
             help="Preserve an existing IntraPhy output directory as a backup, then rerun. Never overwrites inputs.")
     return parser

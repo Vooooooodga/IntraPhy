@@ -9,13 +9,17 @@ for one locus; overlapping records of the same physical DNA do not create
 extra DNA copies. A missing annotation or unresolved alignment remains unknown
 until there is evidence for absence.
 
-The current phylogenetic engine models the DNA-copy component of this question.
-It estimates rates and ancestral tract presence under a finite, user-qualified
-catalogue of copy-duplication and continuous DNA-deletion opportunities. Its
-state is genomic DNA, with no transcript or splice-availability state.
-Annotated intron positions and exon boundaries remain mapping outputs; the
-current engine does not yet assign a phylogenetic event history to every
-gene-structure difference.
+The default genomic-input analysis fits binary presence histories for qualified
+cross-species DNA position-homology groups. These histories describe DNA-site
+presence gains and losses; they do not identify a molecular duplication source
+or mechanism. Genomic exon/intron boundaries remain annotation descriptors.
+Presence histories cannot detect intron-loss exon fusion, boundary shifts, or
+exonization when homologous DNA remains. IntraPhy does not infer transcript use
+or the full evolution of intragenic architecture.
+
+The advanced `--locus-model` route retains explicit, source-directed DNA-copy
+duplication and continuous DNA-deletion opportunities in an
+`intraphy.exon-locus-model/2` model.
 
 ## From genomic inputs to correspondence evidence
 
@@ -26,29 +30,25 @@ each family; orthology is supplied by the user. For already selected
 annotations containing one gene locus per species, omit `--orthologs`.
 
 ```bash
-intraphy check --fasta genomes --gff annotations \
-  --orthologs families --species-tree species_tree.nwk
-intraphy build-case --fasta genomes --gff annotations \
+intraphy analyze --fasta genomes --gff annotations \
   --orthologs families --species-tree species_tree.nwk \
-  --output-dir prepared_case --threads 8
-intraphy derive-tables --input-dir prepared_case \
-  --output-dir correspondence_tables --threads 8
+  --output-dir dna_result --threads 8
 ```
 
-`check` resolves inputs and coordinates. `build-case` extracts the selected
-genomic loci and annotation evidence. `derive-tables` produces correspondence
-tables using the prepared case.
+`analyze` resolves inputs, prepares selected genomic loci, derives
+correspondence evidence, surveys qualified DNA positions, and infers presence
+histories. Use `check`, `build-case`, and `prepare-genomic-evidence` when staged
+inspection or evidence reuse is useful.
 See [genomic input requirements](docs/inputs.md) and the
 [command guide](docs/cli.md) for options and output interpretation.
 
-The mapping output does not automatically become a qualified phylogenetic
-event catalogue. The analyst must review copy homology, ordered positions,
-survey coverage, absence evidence, permitted source-to-target duplications,
-and deletion intervals before supplying a locus model. A sequence match,
-unannotated exon, or unmapped region cannot silently become an evolutionary
+The automatic mapping route only admits position-qualified homology groups and
+keeps unresolved surveys unknown. Its CTMC histories are conditional on these
+groups and the supplied rooted tree. A candidate sequence match, unannotated
+exon, or unmapped region does not automatically establish an evolutionary
 event.
 
-## DNA-copy inference
+## Advanced source-directed DNA-copy inference
 
 The locus model uses schema `intraphy.exon-locus-model/2`. Each connected unit
 declares ordered material tracts, copy positions, an explicit `state_model`,
@@ -95,6 +95,9 @@ cause; unresolved evidence is recorded as unknown. See the
 [conditional statistics](docs/locus_statistics.md).
 
 ## Study status
+
+See [research foundations](docs/research_foundations.md) for literature
+context and scope of the structural characters and phylogenetic analyses.
 
 The [ablation protocol](docs/ablation_study.md) specifies planned comparisons
 for mapping context, shared deletions, and state-model assumptions. It reports

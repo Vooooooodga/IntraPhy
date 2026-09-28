@@ -8,25 +8,24 @@ strand. Multiple transcript records can describe the same DNA; they do not
 multiply the number of physical copies.
 
 ```bash
-intraphy check --fasta genomes --gff annotations \
-  --orthologs family.fa --species-tree species_tree.nwk
-intraphy build-case --fasta genomes --gff annotations \
+intraphy analyze --fasta genomes --gff annotations \
   --orthologs family.fa --species-tree species_tree.nwk \
-  --output-dir prepared_case
-intraphy derive-tables --input-dir prepared_case \
-  --output-dir correspondence_tables
+  --output-dir dna_result
 ```
 
-`check` reports resolved locus selection and coordinate problems.
-`build-case` prepares selected genomic loci and annotation evidence;
-`derive-tables` calculates correspondence tables. See
+`analyze` prepares selected genomic loci, derives correspondence evidence,
+surveys qualified DNA positions, and fits their presence histories. It
+describes DNA-position presence gains and losses, not source-directed
+duplication mechanisms. Ambiguous placements, failed surveys, and unqualified
+candidates remain unknown. DNA presence alone cannot infer intron-loss exon
+fusion, boundary shifts, exonization with retained DNA, transcript usage, or
+complete gene-structure evolution. See
 [input requirements](inputs.md) and the
 [CLI guide](cli.md).
 
-The DNA phylogenetic model needs a separate, reviewed JSON catalogue of
-homologous copy positions and qualified event opportunities. Mapping output
-does not automatically establish duplication or deletion. An unresolved match
-or missing annotation remains unknown.
+For staged use, build a prepared case and run `prepare-genomic-evidence`; the
+survey can be reused only with matching prepared inputs, tree panel, and survey
+settings.
 
 For the bundled synthetic teaching example:
 

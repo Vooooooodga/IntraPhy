@@ -12,10 +12,11 @@ from .preflight import preflight
 GUARDED_COMMANDS = {"build-case", "run", "infer-phylogeny", "visualize", "import-orthofinder",
                     "extract-loci", "normalize-annotation", "explain", "analyze", "fit-exon-rates", "realign-exons"}
 GUARDED_COMMANDS.update({"infer-exon-repertoires", "fit-exon-repertoire-rates"})
-GUARDED_COMMANDS.update({"locus-statistics", "prepare-locus-evidence"})
+GUARDED_COMMANDS.update({"locus-statistics", "prepare-locus-evidence", "prepare-genomic-evidence"})
 OWNERS = {"execution.json", "run_result.json", "case_build_report.tsv", "case_provenance.tsv",
           "visualization_manifest.tsv", "target_manifest.tsv", "figure_manifest.json",
-          "locus_history.json", "locus_fit.json", "locus_statistics.json", "locus_model.json"}
+          "locus_history.json", "locus_fit.json", "locus_statistics.json", "locus_model.json",
+          "genomic_sites.tsv", "genomic_members.tsv", "dna_observations.tsv", "dna_fit.json", "dna_history.json"}
 
 
 def _write_json(path, data):
@@ -31,7 +32,7 @@ def reserve_output(args):
     target = path.resolve()
     if target in {Path('/'), Path.home(), Path.cwd()}:
         raise ValueError("Use a dedicated output directory, not the filesystem root, home or working directory")
-    for field in ("input_dir", "result_dir", "structural_site_matrix", "manifest", "species_tree", "locus_model", "evidence_json",
+    for field in ("input_dir", "result_dir", "genomic_evidence_dir", "structural_site_matrix", "manifest", "species_tree", "locus_model", "evidence_json",
                   "fasta", "gff", "orthologs", "config", "exon_configurations", "exon_rates", "repertoire_model", "profile_dir", "codon_matrix"):
         value = getattr(args, field, None)
         paths = value if isinstance(value, (list, tuple)) else [value]
@@ -79,7 +80,7 @@ def command_session(args):
             print(f"IntraPhy: {args.command} -> {directory}", file=sys.stderr)
         if getattr(args, 'analysis_range', 'all') != 'all':
             logger.warning("Coverage subset requested; the threshold has no calibrated biological interpretation")
-        if getattr(args, 'model', 'parsimony') in {'er-ard', 'foreground', 'exon-ctmc'}:
+        if getattr(args, 'model', 'parsimony') in {'er-ard', 'foreground', 'exon-ctmc', 'dna-presence-ctmc'}:
             logger.warning("CTMC results are conditional; finite-sample LRT calibration remains unassessed")
         yield
         state['status'] = 'completed'

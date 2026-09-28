@@ -8,10 +8,14 @@ from ..topology import SpeciesTree
 
 
 def required_tools(args):
+    if args.command == "prepare-genomic-evidence":
+        return []
     if getattr(args, "model", None) == "exon-locus-ctmc":
         return []
     names = set()
-    if args.command in {"build-case", "derive-tables", "analyze"}:
+    raw_analyze = (args.command == "analyze" and getattr(args, "model", None) == "dna-presence-ctmc"
+                   and not getattr(args, "input_dir", None))
+    if args.command in {"build-case", "derive-tables"} or raw_analyze:
         names.add("mafft")  # Family protein alignment and exon-pair alignment.
         names.add(getattr(args, "context_aligner", "minimap2"))
         names.add(getattr(args, "aligner", "mafft"))
@@ -28,6 +32,54 @@ def required_tools(args):
 
 
 def validate_arguments(args):
+    if getattr(args, "command", None) == "analyze" and getattr(args, "model", None) is None:
+        args.model = "exon-locus-ctmc" if getattr(args, "locus_model", None) else "dna-presence-ctmc"
+    if getattr(args, "command", None) == "analyze" and getattr(args, "model", None) == "dna-presence-ctmc":
+        if getattr(args, "root_frequency", "stationary") not in {"stationary", "fixed"}:
+            raise ValueError("dna-presence-ctmc supports --root-frequency stationary or fixed.")
+        if getattr(args, "locus_model", None):
+            raise ValueError("--locus-model requires --model exon-locus-ctmc")
+        if getattr(args, "exon_configurations", None) or getattr(args, "exon_rates", None):
+            raise ValueError("Exon-configuration inputs require an explicit exon-parsimony or exon-ctmc model.")
+        legacy_controls = (
+            ("observation_view", "evidence"), ("max_locus_bases", 100000),
+            ("alignment_timeout", 600), ("exon_identity", .7),
+            ("anchor_bases", 12), ("anchor_identity", .8),
+        )
+        if any(getattr(args, name, default) != default for name, default in legacy_controls) or any(
+                getattr(args, name, None) not in (None, [], ()) for name in
+                ("max_states", "max_origin_scenarios", "max_observation_scenarios", "origin_root_sensitivity")):
+            raise ValueError("Exon-configuration controls do not apply to dna-presence-ctmc.")
+        if getattr(args, "input_dir", None) and any(getattr(args, name, None) for name in
+                                                      ("fasta", "manifest", "gff", "orthologs")):
+            raise ValueError("Use either --input-dir prepared inputs or raw FASTA/GFF inputs.")
+        if getattr(args, "branch_length_mode", "supplied") != "supplied":
+            raise ValueError("dna-presence-ctmc uses supplied tree branch lengths.")
+        if getattr(args, "parameter_mode", "fit") != "fit":
+            raise ValueError("--parameter-mode applies only to exon-locus-ctmc.")
+        if (getattr(args, "dna_gain_rate", None) is None) != (getattr(args, "dna_loss_rate", None) is None):
+            raise ValueError("--dna-gain-rate and --dna-loss-rate must be supplied together.")
+        if getattr(args, "root_frequency", "stationary") == "stationary" and getattr(args, "root_presence", .5) != .5:
+            raise ValueError("--root-presence is used only with --root-frequency fixed.")
+        if getattr(args, "survey_max_dp_cells", 250000) < 1:
+            raise ValueError("--survey-max-dp-cells must be positive.")
+        for field in ("survey_min_identity", "survey_min_coverage", "dna_gain_rate", "dna_loss_rate"):
+            value = getattr(args, field, None)
+            if value is not None and (not math.isfinite(value) or value < 0 or
+                                      (field.startswith("survey_") and value > 1)):
+                raise ValueError(f"--{field.replace('_', '-')} is outside its valid range")
+        if getattr(args, "root_frequency", "stationary") == "fixed" and not 0 <= float(getattr(args, "root_presence", .5)) <= 1:
+            raise ValueError("--root-presence must lie in [0, 1] for a fixed root distribution.")
+    if getattr(args, "command", None) == "prepare-genomic-evidence":
+        if getattr(args, "threads", 1) < 1:
+            raise ValueError("--threads must be at least 1")
+        if getattr(args, "survey_max_dp_cells", 250000) < 1:
+            raise ValueError("--survey-max-dp-cells must be positive.")
+        for field in ("survey_min_identity", "survey_min_coverage"):
+            value = getattr(args, field, None)
+            if value is not None and (not math.isfinite(value) or not 0 <= value <= 1):
+                raise ValueError(f"--{field.replace('_', '-')} must be finite and in [0, 1]")
+        return
     if args.command == "locus-statistics":
         from .locus_statistics import validate_locus_statistics_arguments
         validate_locus_statistics_arguments(args)
@@ -58,6 +110,11 @@ def validate_arguments(args):
             raise ValueError("Coverage filtering options are not implemented for exon-locus-ctmc.")
         if getattr(args, "root_frequency", "estimated") != "estimated" or getattr(args, "root_presence", .5) != .5:
             raise ValueError("Binary root-frequency options are not used; provide the full root distribution in --locus-model.")
+        if (getattr(args, "dna_gain_rate", None) is not None or getattr(args, "dna_loss_rate", None) is not None
+                or getattr(args, "survey_min_identity", .7) != .7
+                or getattr(args, "survey_min_coverage", .8) != .8
+                or getattr(args, "survey_max_dp_cells", 250000) != 250000):
+            raise ValueError("DNA-presence rates and survey thresholds apply only to --model dna-presence-ctmc.")
         if getattr(args, "ascertainment", "observed-at-least-one") != "observed-at-least-one":
             raise ValueError("Legacy ascertainment options are not used; discovery is declared in --locus-model.")
         if getattr(args, "command", None) in {"run", "infer-phylogeny"} and getattr(args, "input_dir", None):
@@ -151,6 +208,18 @@ def validate_arguments(args):
 
 
 def validate_input_paths(args):
+    if args.command == "prepare-genomic-evidence":
+        directory = Path(args.input_dir)
+        if not directory.is_dir():
+            raise FileNotFoundError(f"--input-dir: directory does not exist: {args.input_dir}")
+        tree_path = directory / "species_tree.tsv"
+        if not tree_path.is_file():
+            raise FileNotFoundError("Prepared genomic input lacks species_tree.tsv")
+        from ..inference.locus_io import _tree
+        tree, _ = _tree(tree_path)
+        from .genomic_preflight import validate_prepared_input
+        validate_prepared_input(directory, tree)
+        return
     if args.command in {"locus-statistics", "prepare-locus-evidence"}:
         fields = (("locus_model", args.locus_model), ("species_tree", args.species_tree))
         if args.command == "prepare-locus-evidence":
@@ -193,6 +262,45 @@ def validate_input_paths(args):
             raise FileNotFoundError(f"AGAT configuration does not exist: {args.config}")
         if args.timeout < 1:
             raise ValueError("--timeout must be positive")
+    if args.command == "analyze" and getattr(args, "model", None) == "dna-presence-ctmc":
+        from ..inference.locus_io import _tree
+        if getattr(args, "input_dir", None):
+            if getattr(args, "species_tree", None):
+                raise ValueError("--species-tree is already fixed in --input-dir prepared inputs; omit the override.")
+            directory = Path(args.input_dir)
+            if not directory.is_dir():
+                raise FileNotFoundError(f"--input-dir: directory does not exist: {args.input_dir}")
+            tree_path = directory / "species_tree.tsv"
+            if not tree_path.is_file():
+                raise FileNotFoundError("Prepared genomic input lacks species_tree.tsv")
+            args._prepared_input_dir = directory
+            args._species_tree, _ = _tree(tree_path)
+            from .genomic_preflight import validate_prepared_input
+            validate_prepared_input(directory, args._species_tree)
+        else:
+            if not getattr(args, "species_tree", None):
+                raise ValueError("Raw genomic analyze requires --species-tree.")
+            args._species_tree, _ = _tree(args.species_tree)
+            if not (getattr(args, "fasta", None) or getattr(args, "manifest", None)):
+                raise ValueError("Raw genomic analyze requires --fasta or --manifest.")
+            from ..inputs.selection import resolve_inputs
+            args._input_selection = resolve_inputs(args)
+            if set(args._input_selection.tree_species) != set(args._species_tree.leaf_by_label):
+                raise ValueError("Resolved raw input species do not match the supplied tree tips.")
+        if getattr(args, "genomic_evidence_dir", None):
+            if not getattr(args, "input_dir", None):
+                raise ValueError("--genomic-evidence-dir reuse requires --input-dir prepared inputs.")
+            evidence = Path(args.genomic_evidence_dir) / "dna_observations.tsv"
+            if not evidence.is_file():
+                raise FileNotFoundError(f"--genomic-evidence-dir lacks dna_observations.tsv: {evidence}")
+            from .genomic_preflight import validate_reusable_evidence
+            validate_reusable_evidence(
+                args.genomic_evidence_dir, args._prepared_input_dir, args._species_tree,
+                min_identity=args.survey_min_identity,
+                min_coverage=args.survey_min_coverage,
+                max_dp_cells=args.survey_max_dp_cells,
+            )
+        return
     if getattr(args, "model", None) == "exon-locus-ctmc":
         if not getattr(args, "locus_model", None):
             return
