@@ -4,6 +4,7 @@ from pathlib import Path
 import shutil
 
 from ..storage.tabular import read_tsv
+from ..inputs.species_tree import read_species_tree_rows
 from ..topology import SpeciesTree
 
 
@@ -267,9 +268,8 @@ def validate_input_paths(args):
             raise ValueError("--timeout must be positive")
     if args.command == "analyze" and getattr(args, "model", None) in {"dna-presence-ctmc", "intron-position-ctmc"}:
         from ..inference.locus_io import _tree
+        override_tree = None
         if getattr(args, "input_dir", None):
-            if getattr(args, "species_tree", None):
-                raise ValueError("--species-tree is already fixed in --input-dir prepared inputs; omit the override.")
             directory = Path(args.input_dir)
             if not directory.is_dir():
                 raise FileNotFoundError(f"--input-dir: directory does not exist: {args.input_dir}")
@@ -277,12 +277,20 @@ def validate_input_paths(args):
             if not tree_path.is_file():
                 raise FileNotFoundError("Prepared genomic input lacks species_tree.tsv")
             args._prepared_input_dir = directory
-            args._species_tree, _ = _tree(tree_path)
+            if getattr(args, "species_tree", None):
+                prepared_tree = SpeciesTree(read_species_tree_rows(tree_path))
+            else:
+                prepared_tree, _ = _tree(tree_path)
+            args._species_tree = prepared_tree
             if args.model == "intron-position-ctmc":
                 from .intron_preflight import validate_prepared_input
             else:
                 from .genomic_preflight import validate_prepared_input
-            validate_prepared_input(directory, args._species_tree)
+            validate_prepared_input(directory, prepared_tree)
+            if getattr(args, "species_tree", None):
+                override_tree, _ = _tree(args.species_tree)
+                if set(override_tree.leaf_by_label) != set(prepared_tree.leaf_by_label):
+                    raise ValueError("--species-tree override must have exactly the prepared tree tip panel.")
         else:
             if not getattr(args, "species_tree", None):
                 raise ValueError("Raw genomic analyze requires --species-tree.")
@@ -302,21 +310,27 @@ def validate_input_paths(args):
                     raise FileNotFoundError(f"--genomic-evidence-dir lacks intron_observations.tsv: {evidence}")
                 from .intron_preflight import validate_reusable_evidence
                 validate_reusable_evidence(
-                    args.genomic_evidence_dir, args._prepared_input_dir, args._species_tree,
+                    args.genomic_evidence_dir, args._prepared_input_dir, prepared_tree,
                     anchor_window=args.intron_anchor_window,
                     min_anchor_pairs=args.intron_min_anchor_pairs,
                 )
+                if override_tree is not None:
+                    args._species_tree = override_tree
                 return
             evidence = Path(args.genomic_evidence_dir) / "dna_observations.tsv"
             if not evidence.is_file():
                 raise FileNotFoundError(f"--genomic-evidence-dir lacks dna_observations.tsv: {evidence}")
             from .genomic_preflight import validate_reusable_evidence
             validate_reusable_evidence(
-                args.genomic_evidence_dir, args._prepared_input_dir, args._species_tree,
+                args.genomic_evidence_dir, args._prepared_input_dir, prepared_tree,
                 min_identity=args.survey_min_identity,
                 min_coverage=args.survey_min_coverage,
                 max_dp_cells=args.survey_max_dp_cells,
             )
+            if override_tree is not None:
+                args._species_tree = override_tree
+        elif override_tree is not None:
+            args._species_tree = override_tree
         return
     if getattr(args, "model", None) == "exon-locus-ctmc":
         if not getattr(args, "locus_model", None):

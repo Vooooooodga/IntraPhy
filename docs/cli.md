@@ -76,6 +76,14 @@ Evidence preparation validates the rooted tree topology and tip panel but does
 not require branch lengths; phylogenetic inference still requires explicit
 non-root branch lengths.
 
+For `analyze --input-dir`, `--species-tree` may explicitly replace the prepared
+tree when it has exactly the same tip labels. The replacement rooted topology
+and branch lengths condition the inference; prepared loci, species roster, and
+staged observations remain unchanged. Case and reusable-evidence checks are
+performed against the prepared tree before inference uses the replacement.
+The chosen tree is written to the result's `species_tree.tsv`, and the supplied
+tree path is recorded in `execution.json` arguments.
+
 [Glick et al. 2024](https://doi.org/10.1093/molbev/msae248) analyze species-level structural summaries,
 whereas this workflow models qualified per-site observations. Binary intron-position reconstruction such as
 [Csűrös et al. 2011](https://doi.org/10.1371/journal.pcbi.1002150) and homologous exon/domain structure comparison such as
@@ -111,6 +119,14 @@ separately, with no joint likelihood. The intron model does not estimate RNA
 transcript usage, ancestral intron length, rate heterogeneity, or genome-wide
 intron density. See [intron-position method](intron_position_model.md) for
 state, phase, and evidence details.
+
+For staged `analyze --input-dir`, an explicit `--species-tree` replacement is
+allowed only with the exact prepared tip panel. Prepared case and reusable
+intron-evidence coherence are checked against the original tree first; the
+replacement tree then supplies the rooted topology and branch lengths for
+inference. Prepared loci and intron observations are unchanged. The chosen
+tree is written to the result's `species_tree.tsv`, and its supplied path is
+recorded in `execution.json` arguments.
 
 ## Advanced source-directed DNA-copy model
 

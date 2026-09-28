@@ -34,19 +34,35 @@ Parsimony does not require branch lengths for its cost.
 
 ## OrthoFinder
 
-The resource manifest uses `species`, `genome_fasta` and `annotation_file`.
+The resource manifest requires `species`, `genome_fasta` and
+`annotation_file`. An optional `member_id_prefix` declares the exact literal
+prefix to remove from that species' OrthoFinder member IDs before annotation
+lookup. No prefix is inferred from underscores or species names. The original
+member ID is retained in the mapping report, and conflicting mappings from the
+original and stripped ID remain ambiguous.
+
 Supply an upstream orthogroup and the species tree:
 
 ```bash
 intraphy import-orthofinder \
   --orthofinder-dir OrthoFinder/Results_run \
   --orthogroup OG0001 --genome-manifest genomes.tsv \
-  --species-tree species.nwk --output-dir prepared/OG0001
+  --species-tree species.nwk --prune-species-tree \
+  --output-dir prepared/OG0001
 ```
 
 Exact annotation ID resolution determines distinct gene loci. Multiple isoform
-IDs at one locus do not become extra gene copies. Missing or ambiguous locus
-resolution is recorded as an exclusion. This import does not infer orthology.
+IDs at one locus do not become extra gene copies. By default, any missing,
+ambiguous, or multi-locus species mapping is recorded and stops the import.
+`--on-unresolved exclude` retains only species with a unique annotated locus;
+the excluded species and reasons are written to `excluded_families.tsv`, and at
+least two species must remain. It does not assign a state or select among
+paralogs. `--prune-species-tree` requires `--species-tree` and trims extra tips
+to the retained manifest species; missing required tips remain an error. The
+root, branch lengths, and retained paths are preserved. By default, the full
+supplied tree is retained, including tips outside the resource manifest. Use
+the pruning flag when the prepared tree must match the retained species panel.
+This import does not infer orthology.
 
 ## Frozen structural matrix
 

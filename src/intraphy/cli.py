@@ -177,7 +177,15 @@ def _dispatch(args):
             allow_unannotated=args.allow_unannotated_loci,
         )
     elif args.command == "import-orthofinder":
-        import_orthofinder(args.orthofinder_dir, args.orthogroup, args.genome_manifest, args.output_dir, args.species_tree)
+        import_orthofinder(
+            args.orthofinder_dir,
+            args.orthogroup,
+            args.genome_manifest,
+            args.output_dir,
+            args.species_tree,
+            on_unresolved=args.on_unresolved,
+            prune_species_tree=args.prune_species_tree,
+        )
     elif args.command == "scan-hidden-segments":
         scan_hidden_segments(args.source_fasta, args.target_fasta, args.output_dir, args.family_id, args.species, args.gene_copy_id, args.min_identity, args.min_coverage, args.aligner, args.threads)
     elif args.command == "candidate-sensitivity":

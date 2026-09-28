@@ -80,7 +80,7 @@ def add_exon_commands(sub):
     analyze.add_argument("--genomic-evidence-dir", help="Reuse staged observations from prepare-genomic-evidence for the selected character type.")
     analyze.add_argument("--locus-model", action=_LocusModelAction,
                          help="Advanced DNA-only labelled-copy JSON model (intraphy.exon-locus-model/2).")
-    analyze.add_argument("--species-tree", help="Rooted tree for raw inputs or --locus-model; Newick or TSV.")
+    analyze.add_argument("--species-tree", help="Rooted Newick or TSV tree for raw inputs or --locus-model; with --input-dir, explicitly replace its tree using the exact same tip panel.")
     analyze.add_argument("--parameter-mode", choices=("fit", "fixed"), default="fit")
     analyze.add_argument("--output-dir", required=True)
     analyze.add_argument("--threads", type=int, default=1)

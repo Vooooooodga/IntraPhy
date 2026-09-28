@@ -6,10 +6,9 @@ from pathlib import Path
 from collections import defaultdict
 from intraphy.preparation.annotation_index import load_annotation_index
 
-from Bio import Phylo
-
 from .io import read_tsv, write_tsv
 from .preprocess import read_annotation
+from .inputs.orthofinder_ids import member_lookup_headers
 
 
 MANIFEST_FIELDS = [
@@ -248,7 +247,14 @@ def _build_gff_locus_index(annotation_file):
     return exact_index, normalized_index, derived_index
 
 
-def _resolve_members_to_locus(members, annotation_file, sequence_aliases=None, *, locus_index=None):
+def _resolve_members_to_locus(
+    members,
+    annotation_file,
+    sequence_aliases=None,
+    *,
+    locus_index=None,
+    member_id_prefix=None,
+):
     sequence_aliases = sequence_aliases or {}
     exact_index, normalized_index, derived_index = (
         locus_index if locus_index is not None else _build_gff_locus_index(annotation_file)
@@ -258,17 +264,16 @@ def _resolve_members_to_locus(members, annotation_file, sequence_aliases=None, *
     for member in members:
         token_hits = []
         loci = set()
-        primary, _ = _member_token_groups(member)
-        source_headers = sequence_aliases.get(member, set())
-        if not source_headers:
-            source_headers = set().union(*(sequence_aliases.get(token, set()) for token in primary))
-        for header in sorted(source_headers or {member}):
+        headers, has_source_aliases = member_lookup_headers(
+            member, member_id_prefix, sequence_aliases
+        )
+        for header in sorted(headers):
             exact_tokens, metadata_tokens = _member_token_groups(header)
             header_loci = set()
             for tokens in (exact_tokens, metadata_tokens):
                 for token in sorted(tokens):
                     hits = set(exact_index.get(token, set()))
-                    if not source_headers:
+                    if not has_source_aliases:
                         hits.update(normalized_index.get(token, set()))
                     if hits:
                         token_hits.append(f"{token}:{','.join(sorted(hits))}")
@@ -330,7 +335,8 @@ def _members_for_species_from_txt(all_members, resource_rows, sequence_aliases):
         locus_index = _build_gff_locus_index(resource["annotation_file"])
         for member in all_members:
             locus_id, mapping_status, _ = _resolve_members_to_locus(
-                [member], resource["annotation_file"], sequence_aliases, locus_index=locus_index,
+                [member], resource["annotation_file"], sequence_aliases,
+                locus_index=locus_index, member_id_prefix=resource.get("member_id_prefix"),
             )
             if locus_id is not None:
                 species_members[resource["species"]].append(member)
@@ -352,37 +358,36 @@ def _write_species_tree(tree_path, output_path):
         fields = ["node_id", "parent_id", "label", "branch_length"]
         write_tsv(output_path, rows, fields)
         return
-    tree = Phylo.read(str(path), "newick")
-    rows = []
-    node_ids = {}
-    counter = 0
-    for clade in tree.find_clades(order="preorder"):
-        counter += 1
-        node_ids[clade] = f"node_{counter}"
-    for clade in tree.find_clades(order="preorder"):
-        parent = ""
-        if clade is not tree.root:
-            path_to_clade = tree.get_path(clade)
-            parent_clade = tree.root if len(path_to_clade) == 1 else path_to_clade[-2]
-            parent = node_ids[parent_clade]
-        label = clade.name or node_ids[clade]
-        rows.append(
-            {
-                "node_id": node_ids[clade],
-                "parent_id": parent,
-                "label": label,
-                "branch_length": 0.0 if not parent else clade.branch_length if clade.branch_length is not None else "NA",
-            }
-        )
+    from .inputs.species_tree import read_species_tree_rows
+
+    rows = read_species_tree_rows(path)
+    for row in rows:
+        if not row["parent_id"]:
+            row["branch_length"] = 0.0
+        elif row["branch_length"] is None or row["branch_length"] == "":
+            row["branch_length"] = "NA"
     write_tsv(output_path, rows, ["node_id", "parent_id", "label", "branch_length"])
 
 
-def import_orthofinder(orthofinder_dir, orthogroup, genome_manifest, output_dir, species_tree=None):
+def import_orthofinder(
+    orthofinder_dir,
+    orthogroup,
+    genome_manifest,
+    output_dir,
+    species_tree=None,
+    *,
+    on_unresolved="error",
+    prune_species_tree=False,
+):
     """Require one actual gene locus per selected species, retaining all source IDs.
 
     Multiple protein or transcript members may represent the same gene locus.
     Every member must resolve uniquely; members from distinct loci are excluded.
     """
+    if on_unresolved not in {"error", "exclude"}:
+        raise SystemExit("--on-unresolved must be 'error' or 'exclude'")
+    if prune_species_tree and not species_tree:
+        raise SystemExit("--prune-species-tree requires --species-tree")
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     resource_rows = read_tsv(genome_manifest, ["species", "genome_fasta", "annotation_file"])
@@ -425,7 +430,12 @@ def import_orthofinder(orthofinder_dir, orthogroup, genome_manifest, output_dir,
                 }
             )
             continue
-        locus_id, mapping_status, member_rows = _resolve_members_to_locus(members, resource["annotation_file"], sequence_aliases)
+        locus_id, mapping_status, member_rows = _resolve_members_to_locus(
+            members,
+            resource["annotation_file"],
+            sequence_aliases,
+            member_id_prefix=resource.get("member_id_prefix"),
+        )
         locus_ids = sorted({
             locus for item in member_rows if item["gene_id"] != "NA"
             for locus in item["gene_id"].split(";")
@@ -486,10 +496,25 @@ def import_orthofinder(orthofinder_dir, orthogroup, genome_manifest, output_dir,
             excluded,
             ["family_id", "species", "member_count", "locus_count", "source_member_ids", "gene_ids", "reason"],
         )
-        raise SystemExit(f"orthogroup {orthogroup} does not map to exactly one annotated gene locus in every species")
+        if on_unresolved == "error":
+            raise SystemExit(f"orthogroup {orthogroup} does not map to exactly one annotated gene locus in every species")
+    if on_unresolved == "exclude" and len(manifest_rows) < 2:
+        raise SystemExit("--on-unresolved exclude requires at least two species with uniquely mapped loci")
     if not manifest_rows:
         raise SystemExit(f"orthogroup {orthogroup} contains no usable species")
-    write_tsv(output_dir / "manifest.tsv", manifest_rows, MANIFEST_FIELDS)
     if species_tree:
-        _write_species_tree(species_tree, output_dir / "species_tree.tsv")
+        if prune_species_tree:
+            from .inputs.species_tree import prune_species_tree as prune_tree
+            try:
+                prune_tree(
+                    species_tree,
+                    output_dir / "species_tree.tsv",
+                    [row["species"] for row in manifest_rows],
+                    prune_extra_tips=True,
+                )
+            except ValueError as exc:
+                raise SystemExit(str(exc)) from exc
+        else:
+            _write_species_tree(species_tree, output_dir / "species_tree.tsv")
+    write_tsv(output_dir / "manifest.tsv", manifest_rows, MANIFEST_FIELDS)
     return manifest_rows

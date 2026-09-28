@@ -212,7 +212,8 @@ def build_parser():
         description=(
             "Import one upstream orthogroup: every selected species must map to exactly "
             "one annotated gene locus. Multiple isoform members of that locus are accepted "
-            "and their source IDs retained. Ambiguous or unresolved members are excluded."
+            "and their source IDs retained. Ambiguous or unresolved mappings error by "
+            "default; --on-unresolved exclude records and omits those species."
         ),
     )
     orthofinder.add_argument(
@@ -222,9 +223,23 @@ def build_parser():
     orthofinder.add_argument("--orthogroup", required=True)
     orthofinder.add_argument(
         "--genome-manifest", required=True,
-        help="TSV selecting species and their genome_fasta/annotation_file resources; gene IDs are resolved from the orthogroup.",
+        help="TSV selecting species and genome_fasta/annotation_file resources; may declare an exact member_id_prefix per species.",
     )
-    orthofinder.add_argument("--species-tree", help="Supplied TSV or Newick tree, retained without pruning.")
+    orthofinder.add_argument(
+        "--species-tree",
+        help="Supplied TSV or Newick tree; the full tree is retained unless --prune-species-tree is set.",
+    )
+    orthofinder.add_argument(
+        "--on-unresolved",
+        choices=["error", "exclude"],
+        default="error",
+        help="Action for species whose members do not resolve to one annotated locus (default: error).",
+    )
+    orthofinder.add_argument(
+        "--prune-species-tree",
+        action="store_true",
+        help="With --species-tree, retain only tips with uniquely mapped loci (default keeps the full tree).",
+    )
     orthofinder.add_argument("--output-dir", required=True)
 
     hidden = sub.add_parser("scan-hidden-segments")
