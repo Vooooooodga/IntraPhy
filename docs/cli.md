@@ -65,6 +65,9 @@ intraphy analyze --input-dir prepared_case --genomic-evidence-dir dna_evidence \
 Reuse checks the prepared physical-site/member catalogue, genome resource paths,
 tree tip panel, survey thresholds, and evidence schema. It does not repeat the
 alignment survey; preserve and review staged evidence and its source files.
+Evidence preparation validates the rooted tree topology and tip panel but does
+not require branch lengths; phylogenetic inference still requires explicit
+non-root branch lengths.
 
 [Glick et al. 2024](https://doi.org/10.1093/molbev/msae248) analyze species-level structural summaries,
 whereas this workflow models qualified per-site observations. Binary intron-position reconstruction such as

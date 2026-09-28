@@ -8,9 +8,10 @@ from unittest.mock import patch
 
 from intraphy.commands.genomic import dispatch_analyze, dispatch_prepare_evidence
 from intraphy.commands.parser import build_parser
-from intraphy.commands.preflight import validate_arguments
+from intraphy.commands.preflight import validate_arguments, validate_input_paths
 from intraphy.cli import main
 from intraphy.storage.tabular import read_tsv, write_tsv
+from support_intron_fixtures import spliced_fixture
 
 
 def _occurrence(occurrence_id, species, start, end, *, gene):
@@ -29,6 +30,119 @@ def _edge(left, right):
 
 
 class GenomicCommandTests(unittest.TestCase):
+    def _prepare_tree(self, prepared, character_type, tree_text):
+        (prepared / "species_tree.tsv").write_text(tree_text, encoding="utf-8")
+        args = SimpleNamespace(command="prepare-genomic-evidence", input_dir=str(prepared),
+                               character_type=character_type)
+        module = ("intraphy.commands.intron_preflight.validate_prepared_input"
+                  if character_type == "intron-position"
+                  else "intraphy.commands.genomic_preflight.validate_prepared_input")
+        with patch(module) as validate_prepared:
+            validate_input_paths(args)
+        return validate_prepared.call_args.args[1]
+
+    def test_evidence_preparation_accepts_topology_without_branch_lengths(self):
+        with tempfile.TemporaryDirectory() as directory:
+            prepared = Path(directory)
+            topologies = (
+                ("blank", "node_id\tparent_id\tlabel\tbranch_length\n"
+                 "root\t\troot\t\nA\troot\tA\t\nB\troot\tB\t\n"),
+                ("NA", "node_id\tparent_id\tlabel\tbranch_length\n"
+                 "root\t\troot\t\nA\troot\tA\tNA\nB\troot\tB\t\n"),
+                ("no-column", "node_id\tparent_id\tlabel\n"
+                 "root\t\troot\nA\troot\tA\nB\troot\tB\n"),
+            )
+            for branch_value, tree_text in topologies:
+                for character_type in ("dna-presence", "intron-position"):
+                    with self.subTest(branch_value=branch_value, character_type=character_type):
+                        tree = self._prepare_tree(prepared, character_type, tree_text)
+                        self.assertEqual(set(tree.leaf_by_label), {"A", "B"})
+                        self.assertIsNone(tree.length["A"])
+                        self.assertIsNone(tree.length["B"])
+
+    def test_evidence_preparation_preserves_supplied_lengths_and_rejects_invalid_tree(self):
+        with tempfile.TemporaryDirectory() as directory:
+            prepared = Path(directory)
+            complete = ("node_id\tparent_id\tlabel\tbranch_length\n"
+                        "root\t\troot\t\nA\troot\tA\t0.2\nB\troot\tB\t0.3\n")
+            for character_type in ("dna-presence", "intron-position"):
+                with self.subTest(character_type=character_type):
+                    tree = self._prepare_tree(prepared, character_type, complete)
+                    self.assertEqual(tree.length["A"], 0.2)
+                    self.assertEqual(tree.length["B"], 0.3)
+
+            invalid_trees = (
+                ("negative branch length", "node_id\tparent_id\tlabel\tbranch_length\n"
+                 "root\t\troot\t\nA\troot\tA\t-0.2\n"),
+                ("missing parent", "node_id\tparent_id\tlabel\tbranch_length\n"
+                 "root\t\troot\t\nA\tmissing\tA\tNA\n"),
+            )
+            for message, tree_text in invalid_trees:
+                for character_type in ("dna-presence", "intron-position"):
+                    module = ("intraphy.commands.intron_preflight.validate_prepared_input"
+                              if character_type == "intron-position"
+                              else "intraphy.commands.genomic_preflight.validate_prepared_input")
+                    with self.subTest(message=message, character_type=character_type), patch(module):
+                        (prepared / "species_tree.tsv").write_text(tree_text, encoding="utf-8")
+                        args = SimpleNamespace(command="prepare-genomic-evidence",
+                                               input_dir=str(prepared), character_type=character_type)
+                        with self.assertRaisesRegex(SystemExit, message):
+                            validate_input_paths(args)
+
+    def test_cli_evidence_preparation_accepts_topology_and_rejects_roster_mismatch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            dna_root = root / "dna"
+            dna_root.mkdir()
+            dna_inputs = self._write_prepared_fixture(dna_root)
+            intron_root = root / "intron"
+            intron_root.mkdir()
+            intron_inputs = spliced_fixture(intron_root)
+            topology = ("node_id\tparent_id\tlabel\tbranch_length\n"
+                        "root\t\troot\t\nA\troot\tA\tNA\nB\troot\tB\t\n")
+            single_tip = ("node_id\tparent_id\tlabel\tbranch_length\n"
+                          "root\t\troot\t\nA\troot\tA\tNA\n")
+            cases = (("dna-presence", dna_inputs, "dna_observations.tsv"),
+                     ("intron-position", intron_inputs, "intron_observations.tsv"))
+            for character_type, prepared, observation_name in cases:
+                with self.subTest(character_type=character_type):
+                    tree_path = prepared / "species_tree.tsv"
+                    tree_path.write_text(topology, encoding="utf-8")
+                    evidence = root / f"{character_type}_evidence"
+                    command = ["prepare-genomic-evidence", "--character-type", character_type,
+                               "--input-dir", str(prepared), "--output-dir", str(evidence)]
+                    if character_type == "intron-position":
+                        with patch("intraphy.commands.preflight.shutil.which", return_value="mafft"), \
+                                patch("intraphy.coding_correspondence.alignment.protein_multiple_alignment",
+                                      side_effect=lambda records, mode="linsi", threads=1: dict(records)):
+                            self.assertEqual(main(command), 0)
+                    else:
+                        self.assertEqual(main(command), 0)
+                    self.assertTrue((evidence / observation_name).is_file())
+
+                    tree_path.write_text(single_tip, encoding="utf-8")
+                    rejected_output = root / f"{character_type}_rejected"
+                    rejected_command = ["prepare-genomic-evidence", "--character-type", character_type,
+                                        "--input-dir", str(prepared), "--output-dir", str(rejected_output)]
+                    with patch("intraphy.commands.preflight.shutil.which", return_value="mafft"):
+                        self.assertEqual(main(rejected_command), 2)
+                    self.assertFalse(rejected_output.exists())
+
+    def test_phylogenetic_inference_still_requires_nonroot_branch_lengths(self):
+        with tempfile.TemporaryDirectory() as directory:
+            prepared = Path(directory)
+            (prepared / "species_tree.tsv").write_text(
+                "node_id\tparent_id\tlabel\tbranch_length\n"
+                "root\t\troot\t\nA\troot\tA\tNA\nB\troot\tB\t0.3\n",
+                encoding="utf-8",
+            )
+            for model in ("dna-presence-ctmc", "intron-position-ctmc"):
+                with self.subTest(model=model):
+                    args = SimpleNamespace(command="analyze", model=model,
+                                           input_dir=str(prepared), species_tree=None)
+                    with self.assertRaisesRegex(SystemExit, "lacks a branch length"):
+                        validate_input_paths(args)
+
     def test_raw_genomic_analyze_defaults_to_dna_presence(self):
         args = build_parser().parse_args([
             "analyze", "--fasta", "genomes", "--gff", "annotations",

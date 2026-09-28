@@ -216,8 +216,7 @@ def validate_input_paths(args):
         tree_path = directory / "species_tree.tsv"
         if not tree_path.is_file():
             raise FileNotFoundError("Prepared genomic input lacks species_tree.tsv")
-        from ..inference.locus_io import _tree
-        tree, _ = _tree(tree_path)
+        tree = SpeciesTree(read_tsv(tree_path))
         if getattr(args, "character_type", "dna-presence") == "intron-position":
             from .intron_preflight import validate_prepared_input
         else:
