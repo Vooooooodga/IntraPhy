@@ -4,7 +4,7 @@ from intraphy import __version__
 from intraphy.verification.calibration import DEFAULT_SCENARIOS
 def build_parser():
     parser = argparse.ArgumentParser(
-        prog="intraphy", description="Infer genomic DNA-presence histories on a supplied rooted species tree.",
+        prog="intraphy", description="Infer genomic DNA-presence or intron-position histories on a supplied rooted species tree.",
         epilog="Primary workflow: analyze --fasta GENOMES --gff ANNOTATIONS --species-tree TREE. Advanced labelled-copy inference uses --locus-model. See docs/quickstart.md.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -15,13 +15,17 @@ def build_parser():
     from .exons import add_dna_observation_options
     prepare_dna = sub.add_parser(
         "prepare-genomic-evidence",
-        help="Derive qualified DNA position-homology observations from prepared genomic inputs.",
+        help="Derive qualified DNA-presence or intron-position observations from prepared genomic inputs.",
     )
+    prepare_dna.add_argument("--character-type", choices=("dna-presence", "intron-position"), default="dna-presence",
+                             help="Observation domain to derive; staged tables remain separate by character type.")
     prepare_dna.add_argument("--input-dir", required=True,
                              help="Prepared build-case directory, optionally already containing derive-tables outputs.")
     prepare_dna.add_argument("--output-dir", required=True)
     prepare_dna.add_argument("--threads", type=int, default=1)
     add_dna_observation_options(prepare_dna)
+    from .exons import add_intron_observation_options
+    add_intron_observation_options(prepare_dna)
     from .repertoires import add_repertoire_commands
     add_repertoire_commands(sub)
     from .locus_statistics import add_locus_statistics_commands

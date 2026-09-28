@@ -76,6 +76,29 @@ from it. A cropped sequence requires matching rebased annotation. Changing only
 a FASTA header does not correct chromosome-based GFF coordinates. Minus-strand
 genes must retain a consistent sequence orientation and GFF strand/phase.
 
+## Intron-position evidence
+
+The `intron-position-ctmc` route uses selected genomic loci, annotated CDS paths,
+and intron intervals. A candidate intron position must project between adjacent
+coding bases in the family protein MSA and have supported local amino-acid
+flanks. State 1 requires the intron interval to exactly span adjacent coding
+endpoints whose bases agree with the strand-oriented genome; intron interior
+sequence is not assessed. State 0 requires adjacent coding bases in the genome.
+An endpoint `N` or mismatch remains unknown; a missing declared FASTA resource
+or backend failure stops preparation. Missing CDS,
+unsupported projection, competing physical boundaries, or unavailable sequence
+yields `unknown`. The route does not infer an exon for a gene-only annotation.
+
+GFF CDS phase is annotation metadata used while parsing coding segments. The
+reported `coding_right_base_offset` is the position of the right coding base
+within its codon at the projected MSA boundary; it is distinct from the GFF
+phase field. At a consistent internal CDS junction, downstream phase is
+`(3 - coding_right_base_offset) % 3`, following the
+[Sequence Ontology GFF3 specification](https://github.com/The-Sequence-Ontology/Specifications/blob/master/gff3.md).
+The model reports intron presence at a homologous coding position,
+not intron-length change or transcript usage. See the
+[intron-position method](intron_position_model.md).
+
 The existing interval reader uses a supplied `.fai` when available and otherwise
 streams the FASTA. It does not require a user-created index or read every complete
 genome into a multi-species in-memory sequence dictionary. Repeated unindexed

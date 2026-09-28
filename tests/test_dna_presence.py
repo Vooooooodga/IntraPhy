@@ -158,6 +158,15 @@ class DnaPresenceTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "tip mismatch"):
                 analyze_dna_presence(_rows({"A": 0}), _tree(), Path(directory) / "missing")
 
+    def test_explicit_intron_observation_is_rejected_by_dna_entrypoint(self):
+        rows = _rows({"A": 0, "B": 1})
+        for row in rows:
+            row["observation_type"] = "intron_position_presence"
+            row["layer"] = "intron_position"
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ValueError, "observation_type"):
+                analyze_dna_presence(rows, _tree(), directory)
+
 
 if __name__ == "__main__":
     unittest.main()

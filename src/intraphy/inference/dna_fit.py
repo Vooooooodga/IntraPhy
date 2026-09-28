@@ -1,4 +1,4 @@
-"""Family-shared two-state DNA presence CTMC fitting."""
+"""Family-shared two-state binary-presence CTMC fitting."""
 from __future__ import annotations
 
 import math
@@ -130,8 +130,16 @@ def _optimize_rates(tree, patterns, fixed, free, rates_at, log_likelihood):
     }
 
 
-def fit_dna_family(tree, observations_by_site, *, root_frequency, root_presence, fixed_rates, workers=1):
-    """Fit rates on the ascertainment-conditioned independent-site likelihood."""
+def fit_binary_family(tree, observations_by_site, *, root_frequency, root_presence, fixed_rates, workers=1):
+    """Fit shared rates on the ascertainment-conditioned site likelihood."""
     labels = tuple(sorted(tree.leaf_by_label))
     patterns = _compress_patterns(list(observations_by_site.values()), labels)
     return _fit_family(tree, patterns, root_frequency, root_presence, fixed_rates, workers)
+
+
+def fit_dna_family(tree, observations_by_site, *, root_frequency, root_presence, fixed_rates, workers=1):
+    """Backward-compatible name for the shared binary-presence fitter."""
+    return fit_binary_family(
+        tree, observations_by_site, root_frequency=root_frequency,
+        root_presence=root_presence, fixed_rates=fixed_rates, workers=workers,
+    )

@@ -42,6 +42,16 @@ inspection or evidence reuse is useful.
 See [genomic input requirements](docs/inputs.md) and the
 [command guide](docs/cli.md) for options and output interpretation.
 
+For a separate homologous intron-position history, select
+`--model intron-position-ctmc`. This analyzes annotated genomic introns at
+coding positions aligned through a family protein MSA; it does not combine
+intron states with DNA-material states. GFF phase is retained as annotation
+metadata and is distinct from the coding-base offset at the aligned boundary.
+The intron model does not infer RNA transcript use, ancestral intron length,
+rate heterogeneity, or genome-wide intron density. Zero-candidate families are
+reported in `intron_families.tsv` without a fabricated site. See the
+[intron-position method](docs/intron_position_model.md).
+
 The automatic mapping route only admits position-qualified homology groups and
 keeps unresolved surveys unknown. Its CTMC histories are conditional on these
 groups and the supplied rooted tree. A candidate sequence match, unannotated

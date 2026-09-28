@@ -85,8 +85,12 @@ candidate DNA intervals and structural features. Its binary DNA-presence CTMC
 uses state 0 for supported absence and state 1 for supported presence at a
 homologous position. A 0-to-1 change is a structural material gain at that
 position; the model does not identify duplication, transfer, or another source
-mechanism. Intron boundaries and lengths are genomic annotation descriptors
-here; the DNA-presence history does not infer their evolution.
+mechanism. The separate intron-position CTMC models coding continuity and
+intron interruption at positions projected through a family protein MSA;
+genomic endpoint evidence supports those latent states. It does not estimate
+RNA use, ancestral intron length, rate heterogeneity, or genome-wide intron
+density. The domain-specific evidence rules and limitations are described in the
+[intron-position method](intron_position_model.md).
 
 The DNA-presence rate analysis conditions on the supplied species tree and
 branch lengths. It fits family-shared gain/loss rates over eligible sites, with

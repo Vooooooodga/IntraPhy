@@ -7,6 +7,7 @@ from ..verification.exon_cases import SCENARIOS
 
 MODELS = ("exon-locus-ctmc", "exon-parsimony", "exon-ctmc")
 DNA_PRESENCE_MODEL = "dna-presence-ctmc"
+INTRON_POSITION_MODEL = "intron-position-ctmc"
 
 
 class _LocusModelAction(argparse.Action):
@@ -25,7 +26,7 @@ class _AnalyzeModelAction(argparse.Action):
         setattr(namespace, self.dest, value)
         namespace._model_explicit = True
         if not getattr(namespace, "_root_frequency_explicit", False):
-            namespace.root_frequency = "stationary" if value == DNA_PRESENCE_MODEL else "estimated"
+            namespace.root_frequency = "stationary" if value in {DNA_PRESENCE_MODEL, INTRON_POSITION_MODEL} else "estimated"
 
 
 class _RootFrequencyAction(argparse.Action):
@@ -41,6 +42,13 @@ def add_dna_observation_options(command):
                          help="Minimum aligned coverage for a qualified DNA position-homology observation.")
     command.add_argument("--survey-max-dp-cells", type=int, default=250000,
                          help="Pairwise alignment cell budget; over-budget candidates remain unknown.")
+
+
+def add_intron_observation_options(command):
+    command.add_argument("--intron-anchor-window", type=int, default=15,
+                         help="Maximum aligned amino-acid columns on each flank used to identify corresponding intron positions.")
+    command.add_argument("--intron-min-anchor-pairs", type=int, default=8,
+                         help="Minimum paired alignment columns required to qualify an intron position.")
 
 
 def add_configuration_options(command):
@@ -66,10 +74,10 @@ def add_configuration_options(command):
 def add_exon_commands(sub):
     from .exon_statistics import add_statistics_commands
     add_statistics_commands(sub)
-    analyze = sub.add_parser("analyze", help="Infer DNA presence histories from genomic evidence or a supplied locus model.")
+    analyze = sub.add_parser("analyze", help="Infer a genomic DNA-presence or intron-position history, or use a supplied locus model.")
     add_file_inputs(analyze, required=False)
     analyze.add_argument("--input-dir", help="Prepared genomic case directory containing species_tree.tsv.")
-    analyze.add_argument("--genomic-evidence-dir", help="Reuse dna_observations.tsv from prepare-genomic-evidence.")
+    analyze.add_argument("--genomic-evidence-dir", help="Reuse staged observations from prepare-genomic-evidence for the selected character type.")
     analyze.add_argument("--locus-model", action=_LocusModelAction,
                          help="Advanced DNA-only labelled-copy JSON model (intraphy.exon-locus-model/2).")
     analyze.add_argument("--species-tree", help="Rooted tree for raw inputs or --locus-model; Newick or TSV.")
@@ -78,21 +86,22 @@ def add_exon_commands(sub):
     analyze.add_argument("--threads", type=int, default=1)
     analyze.add_argument("--flank", type=int, default=1000)
     analyze.add_argument("--max-extension", type=int, default=10000)
-    analyze.add_argument("--model", choices=(DNA_PRESENCE_MODEL, *MODELS), default=DNA_PRESENCE_MODEL,
+    analyze.add_argument("--model", choices=(DNA_PRESENCE_MODEL, INTRON_POSITION_MODEL, *MODELS), default=DNA_PRESENCE_MODEL,
                          action=_AnalyzeModelAction,
-                         help="DNA presence is the genomic-input default; exon-locus-ctmc requires --locus-model.")
+                         help="DNA presence is the default; select intron-position-ctmc for annotated intron boundaries; exon-locus-ctmc requires --locus-model.")
     analyze.add_argument("--root-frequency", choices=("stationary", "fixed", "estimated"), default="stationary",
                          action=_RootFrequencyAction,
-                         help="Root presence distribution for the binary DNA model.")
+                         help="Root presence distribution for the selected binary genomic character model.")
     analyze.add_argument("--root-presence", type=float, default=.5,
                          help="Root presence probability when --root-frequency fixed is selected.")
-    analyze.add_argument("--dna-gain-rate", type=float,
-                         help="Fixed DNA-presence gain rate; supply together with --dna-loss-rate.")
-    analyze.add_argument("--dna-loss-rate", type=float,
-                         help="Fixed DNA-presence loss rate; supply together with --dna-gain-rate.")
+    analyze.add_argument("--gain-rate", "--dna-gain-rate", dest="dna_gain_rate", type=float,
+                         help="Fixed gain rate for the selected binary character; supply with --loss-rate. --dna-gain-rate remains an alias.")
+    analyze.add_argument("--loss-rate", "--dna-loss-rate", dest="dna_loss_rate", type=float,
+                         help="Fixed loss rate for the selected binary character; supply with --gain-rate. --dna-loss-rate remains an alias.")
     analyze.add_argument("--branch-length-mode", choices=("supplied", "unit"), default="supplied")
     add_configuration_options(analyze)
     add_dna_observation_options(analyze)
+    add_intron_observation_options(analyze)
     cesar = sub.add_parser("realign-exons", help="Optional CESAR2 coding gene-mode prediction, separate from observations.")
     cesar.add_argument("--input-dir", required=True)
     cesar.add_argument("--output-dir", required=True)

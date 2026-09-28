@@ -16,7 +16,9 @@ GUARDED_COMMANDS.update({"locus-statistics", "prepare-locus-evidence", "prepare-
 OWNERS = {"execution.json", "run_result.json", "case_build_report.tsv", "case_provenance.tsv",
           "visualization_manifest.tsv", "target_manifest.tsv", "figure_manifest.json",
           "locus_history.json", "locus_fit.json", "locus_statistics.json", "locus_model.json",
-          "genomic_sites.tsv", "genomic_members.tsv", "dna_observations.tsv", "dna_fit.json", "dna_history.json"}
+          "genomic_sites.tsv", "genomic_members.tsv", "dna_observations.tsv", "dna_fit.json", "dna_history.json",
+          "intron_families.tsv", "intron_positions.tsv", "intron_observations.tsv", "intron_alignment.tsv",
+          "intron_fit.json", "intron_history.json"}
 
 
 def _write_json(path, data):
@@ -80,7 +82,7 @@ def command_session(args):
             print(f"IntraPhy: {args.command} -> {directory}", file=sys.stderr)
         if getattr(args, 'analysis_range', 'all') != 'all':
             logger.warning("Coverage subset requested; the threshold has no calibrated biological interpretation")
-        if getattr(args, 'model', 'parsimony') in {'er-ard', 'foreground', 'exon-ctmc', 'dna-presence-ctmc'}:
+        if getattr(args, 'model', 'parsimony') in {'er-ard', 'foreground', 'exon-ctmc', 'dna-presence-ctmc', 'intron-position-ctmc'}:
             logger.warning("CTMC results are conditional; finite-sample LRT calibration remains unassessed")
         yield
         state['status'] = 'completed'

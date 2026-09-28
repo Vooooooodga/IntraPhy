@@ -9,16 +9,20 @@ from ..topology import SpeciesTree
 
 def required_tools(args):
     if args.command == "prepare-genomic-evidence":
-        return []
+        return ["mafft"] if getattr(args, "character_type", "dna-presence") == "intron-position" else []
     if getattr(args, "model", None) == "exon-locus-ctmc":
         return []
     names = set()
     raw_analyze = (args.command == "analyze" and getattr(args, "model", None) == "dna-presence-ctmc"
                    and not getattr(args, "input_dir", None))
+    intron_preparation = (args.command == "analyze" and getattr(args, "model", None) == "intron-position-ctmc"
+                          and not getattr(args, "genomic_evidence_dir", None))
     if args.command in {"build-case", "derive-tables"} or raw_analyze:
         names.add("mafft")  # Family protein alignment and exon-pair alignment.
         names.add(getattr(args, "context_aligner", "minimap2"))
         names.add(getattr(args, "aligner", "mafft"))
+    if intron_preparation:
+        names.add("mafft")
     new_model = str(getattr(args, "model", "")).startswith("exon-")
     if (args.command == "run" and not (new_model and getattr(args, "exon_configurations", None))) or (args.command == "infer-phylogeny" and new_model and not getattr(args, "exon_configurations", None)):
         names.update({"mafft", getattr(args, "evidence_aligner", "minimap2")})
@@ -34,6 +38,9 @@ def required_tools(args):
 def validate_arguments(args):
     if getattr(args, "command", None) == "analyze" and getattr(args, "model", None) is None:
         args.model = "exon-locus-ctmc" if getattr(args, "locus_model", None) else "dna-presence-ctmc"
+    if getattr(args, "command", None) == "analyze":
+        from .intron_preflight import validate_analysis_options
+        validate_analysis_options(args)
     if getattr(args, "command", None) == "analyze" and getattr(args, "model", None) == "dna-presence-ctmc":
         if getattr(args, "root_frequency", "stationary") not in {"stationary", "fixed"}:
             raise ValueError("dna-presence-ctmc supports --root-frequency stationary or fixed.")
@@ -71,14 +78,8 @@ def validate_arguments(args):
         if getattr(args, "root_frequency", "stationary") == "fixed" and not 0 <= float(getattr(args, "root_presence", .5)) <= 1:
             raise ValueError("--root-presence must lie in [0, 1] for a fixed root distribution.")
     if getattr(args, "command", None) == "prepare-genomic-evidence":
-        if getattr(args, "threads", 1) < 1:
-            raise ValueError("--threads must be at least 1")
-        if getattr(args, "survey_max_dp_cells", 250000) < 1:
-            raise ValueError("--survey-max-dp-cells must be positive.")
-        for field in ("survey_min_identity", "survey_min_coverage"):
-            value = getattr(args, field, None)
-            if value is not None and (not math.isfinite(value) or not 0 <= value <= 1):
-                raise ValueError(f"--{field.replace('_', '-')} must be finite and in [0, 1]")
+        from .intron_preflight import validate_prepare_options
+        validate_prepare_options(args)
         return
     if args.command == "locus-statistics":
         from .locus_statistics import validate_locus_statistics_arguments
@@ -217,7 +218,10 @@ def validate_input_paths(args):
             raise FileNotFoundError("Prepared genomic input lacks species_tree.tsv")
         from ..inference.locus_io import _tree
         tree, _ = _tree(tree_path)
-        from .genomic_preflight import validate_prepared_input
+        if getattr(args, "character_type", "dna-presence") == "intron-position":
+            from .intron_preflight import validate_prepared_input
+        else:
+            from .genomic_preflight import validate_prepared_input
         validate_prepared_input(directory, tree)
         return
     if args.command in {"locus-statistics", "prepare-locus-evidence"}:
@@ -262,7 +266,7 @@ def validate_input_paths(args):
             raise FileNotFoundError(f"AGAT configuration does not exist: {args.config}")
         if args.timeout < 1:
             raise ValueError("--timeout must be positive")
-    if args.command == "analyze" and getattr(args, "model", None) == "dna-presence-ctmc":
+    if args.command == "analyze" and getattr(args, "model", None) in {"dna-presence-ctmc", "intron-position-ctmc"}:
         from ..inference.locus_io import _tree
         if getattr(args, "input_dir", None):
             if getattr(args, "species_tree", None):
@@ -275,7 +279,10 @@ def validate_input_paths(args):
                 raise FileNotFoundError("Prepared genomic input lacks species_tree.tsv")
             args._prepared_input_dir = directory
             args._species_tree, _ = _tree(tree_path)
-            from .genomic_preflight import validate_prepared_input
+            if args.model == "intron-position-ctmc":
+                from .intron_preflight import validate_prepared_input
+            else:
+                from .genomic_preflight import validate_prepared_input
             validate_prepared_input(directory, args._species_tree)
         else:
             if not getattr(args, "species_tree", None):
@@ -290,6 +297,17 @@ def validate_input_paths(args):
         if getattr(args, "genomic_evidence_dir", None):
             if not getattr(args, "input_dir", None):
                 raise ValueError("--genomic-evidence-dir reuse requires --input-dir prepared inputs.")
+            if args.model == "intron-position-ctmc":
+                evidence = Path(args.genomic_evidence_dir) / "intron_observations.tsv"
+                if not evidence.is_file():
+                    raise FileNotFoundError(f"--genomic-evidence-dir lacks intron_observations.tsv: {evidence}")
+                from .intron_preflight import validate_reusable_evidence
+                validate_reusable_evidence(
+                    args.genomic_evidence_dir, args._prepared_input_dir, args._species_tree,
+                    anchor_window=args.intron_anchor_window,
+                    min_anchor_pairs=args.intron_min_anchor_pairs,
+                )
+                return
             evidence = Path(args.genomic_evidence_dir) / "dna_observations.tsv"
             if not evidence.is_file():
                 raise FileNotFoundError(f"--genomic-evidence-dir lacks dna_observations.tsv: {evidence}")

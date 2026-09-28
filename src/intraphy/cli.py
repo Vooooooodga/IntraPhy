@@ -57,6 +57,9 @@ def _dispatch(args):
         elif args.model == "dna-presence-ctmc":
             from .commands.genomic import dispatch_analyze
             dispatch_analyze(args)
+        elif args.model == "intron-position-ctmc":
+            from .commands.genomic import dispatch_analyze_introns
+            dispatch_analyze_introns(args)
         else:
             from .commands.exons import dispatch_analyze
             dispatch_analyze(args)
@@ -133,6 +136,8 @@ def _dispatch(args):
             raise ValueError("The exon-locus-ctmc result currently provides auditable JSON posterior and event-count outputs; no locus-specific graphic renderer is available.")
         if model_name == "dna-presence-ctmc":
             raise ValueError("The dna-presence-ctmc result contains DNA presence histories; no structural graphic renderer is available.")
+        if model_name == "intron-position-ctmc":
+            raise ValueError("The intron-position-ctmc result contains intron-position histories; no structural graphic renderer is available.")
         if model_name.startswith("exon-"):
             from .reporting.exon_results import render_exon_results
             render_exon_results(args.result_dir, args.output_dir)

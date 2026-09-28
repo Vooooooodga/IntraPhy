@@ -73,6 +73,35 @@ whereas this workflow models qualified per-site observations. Binary intron-posi
 methodological context, not validation of this observation process or event
 interpretation.
 
+## Intron-position histories
+
+```bash
+intraphy analyze --model intron-position-ctmc --fasta genomes --gff annotations \
+  --orthologs families --species-tree tree.nwk --output-dir intron_result
+```
+
+This is a separate binary model of annotated genomic intron presence at coding
+positions projected through a protein-family MSA. Its states refer to an
+annotated intron at the aligned position or consecutive genomic coding bases;
+unsupported projections and conflicting physical boundaries remain unknown.
+The MSA is conditional on the selected family and available coding paths, and
+does not certify orthology. Rates are family-shared, and the stationary root
+distribution is the default; `--root-frequency fixed --root-presence P` sets a
+fixed root probability. `--gain-rate` and `--loss-rate` evaluate paired fixed
+rates in the supplied tree's branch-length units. The retained `--dna-gain-rate`
+and `--dna-loss-rate` spellings are aliases for the selected binary model.
+
+Prepare reusable observations with
+`intraphy prepare-genomic-evidence --character-type intron-position`; the
+result has separate `intron_families.tsv`, `intron_positions.tsv`,
+`intron_observations.tsv`, and `intron_alignment.tsv` files. The family summary
+records zero-site families without a synthetic character. The fit and history
+are `intron_fit.json` and `intron_history.json`. DNA-presence and intron-position observations are fitted
+separately, with no joint likelihood. The intron model does not estimate RNA
+transcript usage, ancestral intron length, rate heterogeneity, or genome-wide
+intron density. See [intron-position method](intron_position_model.md) for
+state, phase, and evidence details.
+
 ## Advanced source-directed DNA-copy model
 
 ```bash

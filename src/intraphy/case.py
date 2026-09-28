@@ -191,7 +191,7 @@ def build_case(
     context_aligner="minimap2",
     coding_msa_mode="linsi",
     short_context_max_length=300,
-    *, target_rows=None, allow_unannotated=False,
+    *, target_rows=None, allow_unannotated=False, derive_correspondence=True,
     short_alignment_max_dp_cells=MAX_INTERNAL_DP_CELLS,
 ):
     short_alignment_max_dp_cells = _validate_max_dp_cells(short_alignment_max_dp_cells)
@@ -245,7 +245,7 @@ def build_case(
         _write_species_tree(species_tree, output_dir / "species_tree.tsv")
     copy_optional_tree(copy_tree, output_dir, "copy_tree.tsv")
     copy_optional_tree(gene_tree, output_dir, "gene_tree.tsv")
-    if appended:
+    if appended and derive_correspondence:
         derive_tables(
             output_dir,
             output_dir,

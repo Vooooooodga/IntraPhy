@@ -23,6 +23,18 @@ complete gene-structure evolution. See
 [input requirements](inputs.md) and the
 [CLI guide](cli.md).
 
+To analyze annotated intron positions as a separate binary character domain:
+
+```bash
+intraphy analyze --model intron-position-ctmc --fasta genomes --gff annotations \
+  --orthologs family.fa --species-tree species_tree.nwk --output-dir intron_result
+```
+
+This model maps intron boundaries through a protein MSA and estimates
+position-presence histories independently of DNA-material histories. It does
+not infer transcript usage or ancestral intron lengths; details and phase
+semantics are in the [intron-position method](intron_position_model.md).
+
 For staged use, build a prepared case and run `prepare-genomic-evidence`; the
 survey can be reused only with matching prepared inputs, tree panel, and survey
 settings.
