@@ -122,6 +122,7 @@ def _dispatch(args):
             context_aligner=args.context_aligner,
             coding_msa_mode=args.coding_msa_mode,
             short_context_max_length=args.short_context_max_length,
+            short_alignment_max_dp_cells=args.short_alignment_max_dp_cells,
         )
     elif args.command == "simulate":
         simulate_dataset(args.output_dir, args.seed, args.scenario)

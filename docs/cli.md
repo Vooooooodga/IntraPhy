@@ -22,6 +22,13 @@ another output directory. See
 [genomic input contracts](inputs.md) for file naming, compressed input,
 coordinate handling, and optional `extract-loci`.
 
+`derive-tables --short-alignment-max-dp-cells N` sets the maximum dynamic-
+programming cell budget for each internal short alignment; the default is
+250000. An alignment exceeding the budget fails in full, and DP states are
+never truncated. Use `--short-alignment-max-dp-cells unlimited` to remove
+IntraPhy's DP cell guard; available memory and other system resources still
+limit the alignment.
+
 Annotation exons and introns are evidence at native coordinates. Repeated
 transcript records covering the same DNA must be deduplicated by physical
 interval when defining copy units. Lack of an annotation alone does not

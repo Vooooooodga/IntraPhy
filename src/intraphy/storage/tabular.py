@@ -1,6 +1,7 @@
 """storage / tabular: extracted responsibilities; see docs/architecture.md."""
 from __future__ import annotations
 
+import ctypes
 from pathlib import Path
 import csv
 import gzip
@@ -15,6 +16,10 @@ def open_text(path):
 
 def iter_tsv(path, required=None, optional=False):
     """Yield TSV rows while the handle is open; reject malformed row widths."""
+    # csv.field_size_limit is process-global. Keep one platform-safe maximum
+    # instead of restoring it when this generator closes: TSV readers may be
+    # interleaved, and restoring a smaller limit could break another reader.
+    csv.field_size_limit((1 << (ctypes.sizeof(ctypes.c_long) * 8 - 1)) - 1)
     path = Path(path)
     if optional and not path.exists():
         return

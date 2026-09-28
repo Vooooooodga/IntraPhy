@@ -1,7 +1,22 @@
 """Stable argparse interface, separate from command execution."""
 import argparse
 from intraphy import __version__
+from intraphy.aligners.types import MAX_INTERNAL_DP_CELLS
 from intraphy.verification.calibration import DEFAULT_SCENARIOS
+
+
+def _positive_int_or_unlimited(value):
+    if value == "unlimited":
+        return None
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a positive integer or 'unlimited'") from exc
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("must be a positive integer or 'unlimited'")
+    return parsed
+
+
 def build_parser():
     parser = argparse.ArgumentParser(
         prog="intraphy", description="Infer genomic DNA-presence or intron-position histories on a supplied rooted species tree.",
@@ -81,6 +96,17 @@ def build_parser():
         type=int,
         default=300,
         help="Maximum anchor-bounded nucleotide interval length for enumerating short-alignment candidates.",
+    )
+    derive.add_argument(
+        "--short-alignment-max-dp-cells",
+        type=_positive_int_or_unlimited,
+        default=MAX_INTERNAL_DP_CELLS,
+        metavar="N|unlimited",
+        help=(
+            f"Maximum DP cells for one complete short alignment (default: {MAX_INTERNAL_DP_CELLS}); "
+            "exceeding the budget fails the alignment without truncation. Use 'unlimited' "
+            "to remove this DP guard; actual system resources still limit the alignment."
+        ),
     )
     derive.add_argument("--threads", type=int, default=1)
     derive.add_argument("--min-size-ratio", type=float, default=0.25)

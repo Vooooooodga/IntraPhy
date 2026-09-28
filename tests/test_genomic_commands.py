@@ -191,6 +191,29 @@ class GenomicCommandTests(unittest.TestCase):
         prepare.assert_called_once_with("prepared", "evidence", min_identity=.75,
                                         min_coverage=.85, max_dp_cells=12345, threads=3)
 
+    def test_cli_prepared_evidence_streams_large_segment_match_description(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            prepared = self._write_prepared_fixture(root)
+            baseline = root / "baseline_evidence"
+            command = ["prepare-genomic-evidence", "--input-dir", str(prepared),
+                       "--output-dir", str(baseline)]
+            self.assertEqual(main(command), 0)
+            expected = read_tsv(baseline / "dna_observations.tsv")
+
+            matches_path = prepared / "segment_matches.tsv"
+            matches = read_tsv(matches_path)
+            # This explanatory field is part of the prepared match schema and
+            # does not affect physical-site eligibility.
+            matches[0]["correspondence_basis"] = ('evidence\t"quoted\nline" λ ' * 9000)
+            self.assertGreater(len(matches[0]["correspondence_basis"]), 131072)
+            write_tsv(matches_path, matches, list(matches[0]))
+
+            actual_dir = root / "large_field_evidence"
+            command[command.index(str(baseline))] = str(actual_dir)
+            self.assertEqual(main(command), 0)
+            self.assertEqual(read_tsv(actual_dir / "dna_observations.tsv"), expected)
+
     def test_dispatch_uses_fixed_supplied_tree_unit_and_does_not_invent_source_events(self):
         with tempfile.TemporaryDirectory() as temp:
             args = SimpleNamespace(
