@@ -10,34 +10,23 @@ multiply the number of physical copies.
 ```bash
 intraphy analyze --fasta genomes --gff annotations \
   --orthologs family.fa --species-tree species_tree.nwk \
-  --output-dir dna_result
+  --output-dir exon_result
 ```
 
-`analyze` prepares selected genomic loci, derives correspondence evidence,
-surveys qualified DNA positions, and fits their presence histories. It
-describes DNA-position presence gains and losses, not source-directed
-duplication mechanisms. Ambiguous placements, failed surveys, and unqualified
-candidates remain unknown. DNA presence alone cannot infer intron-loss exon
-fusion, boundary shifts, exonization with retained DNA, transcript usage, or
-complete gene-structure evolution. See
-[input requirements](inputs.md) and the
-[CLI guide](cli.md).
+`analyze` maps physical exon spans from the selected genomic annotations and
+fits the `exon-structure-ctmc` model. Repeated transcript aliases for the same
+native interval are deduplicated. Conflicting overlapping annotations,
+missing annotation, and ambiguous mapping can leave local observations
+unknown. The model includes terminal and UTR exons when annotated and does not
+infer RNA transcript use or splicing. See [input requirements](inputs.md), the
+[genomic exon-span model](genomic_exon_model.md), and the [CLI guide](cli.md).
 
-To analyze annotated intron positions as a separate binary character domain:
+The explicit `--model intron-position-ctmc` route remains available as a
+separate analysis; see the [CLI guide](cli.md) and
+[intron-position method](intron_position_model.md).
 
-```bash
-intraphy analyze --model intron-position-ctmc --fasta genomes --gff annotations \
-  --orthologs family.fa --species-tree species_tree.nwk --output-dir intron_result
-```
-
-This model maps intron boundaries through a protein MSA and estimates
-position-presence histories independently of DNA-material histories. It does
-not infer transcript usage or ancestral intron lengths; details and phase
-semantics are in the [intron-position method](intron_position_model.md).
-
-For staged use, build a prepared case and run `prepare-genomic-evidence`; the
-survey can be reused only with matching prepared inputs, tree panel, and survey
-settings.
+`--model dna-presence-ctmc` selects the separate binary DNA-position model.
+Its staged evidence route is described in the [CLI guide](cli.md).
 
 For the bundled synthetic teaching example:
 

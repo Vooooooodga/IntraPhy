@@ -51,7 +51,10 @@ def _dispatch(args):
         from .commands.exon_statistics import fit_command
         fit_command(args)
     elif args.command == "analyze":
-        if args.model == "exon-locus-ctmc":
+        if args.model == "exon-structure-ctmc":
+            from .commands.genomic_exons import dispatch_analyze
+            dispatch_analyze(args)
+        elif args.model == "exon-locus-ctmc":
             from .commands.locus import dispatch_locus
             dispatch_locus(args)
         elif args.model == "dna-presence-ctmc":
@@ -139,6 +142,8 @@ def _dispatch(args):
             raise ValueError("The dna-presence-ctmc result contains DNA presence histories; no structural graphic renderer is available.")
         if model_name == "intron-position-ctmc":
             raise ValueError("The intron-position-ctmc result contains intron-position histories; no structural graphic renderer is available.")
+        if model_name == "exon-structure-ctmc":
+            raise ValueError("The exon-structure-ctmc result contains genomic exon-span histories; no renderer is available for this model.")
         if model_name.startswith("exon-"):
             from .reporting.exon_results import render_exon_results
             render_exon_results(args.result_dir, args.output_dir)

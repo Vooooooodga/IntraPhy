@@ -19,8 +19,8 @@ def _positive_int_or_unlimited(value):
 
 def build_parser():
     parser = argparse.ArgumentParser(
-        prog="intraphy", description="Infer genomic DNA-presence or intron-position histories on a supplied rooted species tree.",
-        epilog="Primary workflow: analyze --fasta GENOMES --gff ANNOTATIONS --species-tree TREE. Advanced labelled-copy inference uses --locus-model. See docs/quickstart.md.",
+        prog="intraphy", description="Infer genomic exon-span structure histories on a supplied rooted species tree.",
+        epilog="Primary workflow: analyze --fasta GENOMES --gff ANNOTATIONS --species-tree TREE. DNA-presence and intron-position are separate explicit models; source-directed copy inference uses --locus-model. See docs/quickstart.md.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)

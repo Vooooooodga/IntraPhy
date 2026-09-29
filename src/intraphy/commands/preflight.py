@@ -14,16 +14,20 @@ def required_tools(args):
     if getattr(args, "model", None) == "exon-locus-ctmc":
         return []
     names = set()
-    raw_analyze = (args.command == "analyze" and getattr(args, "model", None) == "dna-presence-ctmc"
+    raw_analyze = (args.command == "analyze" and getattr(args, "model", None) in {"dna-presence-ctmc", "exon-structure-ctmc"}
                    and not getattr(args, "input_dir", None))
     intron_preparation = (args.command == "analyze" and getattr(args, "model", None) == "intron-position-ctmc"
                           and not getattr(args, "genomic_evidence_dir", None))
+    genomic_exon_preparation = (args.command == "analyze" and getattr(args, "model", None) == "exon-structure-ctmc"
+                                and not getattr(args, "exon_configurations", None))
     if args.command in {"build-case", "derive-tables"} or raw_analyze:
         names.add("mafft")  # Family protein alignment and exon-pair alignment.
         names.add(getattr(args, "context_aligner", "minimap2"))
         names.add(getattr(args, "aligner", "mafft"))
     if intron_preparation:
         names.add("mafft")
+    if genomic_exon_preparation:
+        names.update({"mafft", "minimap2"})
     new_model = str(getattr(args, "model", "")).startswith("exon-")
     if (args.command == "run" and not (new_model and getattr(args, "exon_configurations", None))) or (args.command == "infer-phylogeny" and new_model and not getattr(args, "exon_configurations", None)):
         names.update({"mafft", getattr(args, "evidence_aligner", "minimap2")})
@@ -38,10 +42,12 @@ def required_tools(args):
 
 def validate_arguments(args):
     if getattr(args, "command", None) == "analyze" and getattr(args, "model", None) is None:
-        args.model = "exon-locus-ctmc" if getattr(args, "locus_model", None) else "dna-presence-ctmc"
+        args.model = "exon-locus-ctmc" if getattr(args, "locus_model", None) else "exon-structure-ctmc"
     if getattr(args, "command", None) == "analyze":
         from .intron_preflight import validate_analysis_options
         validate_analysis_options(args)
+        from .genomic_exon_preflight import validate_analysis_options as validate_genomic_exon_options
+        validate_genomic_exon_options(args)
     if getattr(args, "command", None) == "analyze" and getattr(args, "model", None) == "dna-presence-ctmc":
         if getattr(args, "root_frequency", "stationary") not in {"stationary", "fixed"}:
             raise ValueError("dna-presence-ctmc supports --root-frequency stationary or fixed.")
@@ -142,7 +148,7 @@ def validate_arguments(args):
                               ("max_locus_bases", 100000), ("alignment_timeout", 600)):
             if getattr(args, name, default) != default:
                 raise ValueError(f"--{name.replace('_', '-')} belongs to raw genomic/configuration inference.")
-    elif getattr(args, "locus_model", None) or (getattr(args, "parameter_mode", "fit") != "fit"):
+    elif getattr(args, "model", None) != "exon-structure-ctmc" and (getattr(args, "locus_model", None) or (getattr(args, "parameter_mode", "fit") != "fit")):
         raise ValueError("--locus-model and --parameter-mode apply only to --model exon-locus-ctmc.")
     if args.command == "fit-exon-repertoire-rates":
         if len(args.log_scale_bounds) != 2 or any(not math.isfinite(x) for x in args.log_scale_bounds) or args.log_scale_bounds[0] >= args.log_scale_bounds[1]:
@@ -171,7 +177,7 @@ def validate_arguments(args):
     for field in ("flank", "max_extension", "short_context_max_length"):
         if getattr(args, field, 0) < 0:
             raise ValueError(f"--{field.replace('_', '-')} must be nonnegative")
-    if str(getattr(args, "model", "")).startswith("exon-") and getattr(args, "model", "") != "exon-locus-ctmc":
+    if str(getattr(args, "model", "")).startswith("exon-") and getattr(args, "model", "") not in {"exon-locus-ctmc", "exon-structure-ctmc"}:
         for name in ("max_states", "max_origin_scenarios", "max_observation_scenarios", "max_locus_bases", "alignment_timeout", "anchor_bases"):
             value = getattr(args, name)
             if value is None and name in {"max_observation_scenarios", "max_states", "max_origin_scenarios"}:
@@ -266,6 +272,10 @@ def validate_input_paths(args):
             raise FileNotFoundError(f"AGAT configuration does not exist: {args.config}")
         if args.timeout < 1:
             raise ValueError("--timeout must be positive")
+    if args.command == "analyze" and getattr(args, "model", None) == "exon-structure-ctmc":
+        from .genomic_exon_preflight import validate_input_paths
+        validate_input_paths(args)
+        return
     if args.command == "analyze" and getattr(args, "model", None) in {"dna-presence-ctmc", "intron-position-ctmc"}:
         from ..inference.locus_io import _tree
         override_tree = None

@@ -1,0 +1,88 @@
+# Genomic exon-span model
+
+## Observation unit
+
+The `exon-structure-ctmc` model follows annotated physical exon spans on a
+supplied rooted species tree. Whole-locus genomic alignment and nucleotide
+searches support correspondence using sequence, coordinates, strand, and local
+order. Existing staged protein-projection evidence, when present, can provide
+corroboration. CDS phase is retained as annotation metadata; it does not score
+or qualify correspondence. Full exon spans are retained, including terminal
+and UTR exons.
+An exon start or end is a geometric boundary on the transcriptional axis; a
+terminal boundary does not automatically have splice donor or acceptor
+function.
+
+Multiple transcripts can identify the same physical interval. Those aliases
+are deduplicated for the observation unit. Distinct overlapping annotated spans
+remain separate evidence records. If their local structures conflict, the
+affected observation is unresolved. A missing annotation, ambiguous mapping,
+or insufficient sequence support is unknown. Annotation records are evidence
+and can contain errors. The method does not infer RNA abundance, isoform use,
+splicing, or an RNA phenotype.
+
+Each catalogue has `observation_unit="genomic_exon_spans"`. The CLI requires
+this marker when `--exon-configurations` reuses a prepared catalogue. A
+transcript-configuration catalogue has a different observation unit and cannot
+be relabelled for this model.
+
+## State and transition process
+
+A local unit represents an ordered exon-span geometry together with the
+presence state of declared local DNA material tracts. Its finite edit graph
+contains eligible exon split, adjacent exon fusion, exon-boundary displacement,
+exonization, exon inactivation, DNA insertion, and DNA deletion transitions.
+A DNA deletion can remove material shared by multiple exons in one transition;
+its resulting geometry is recorded once. Transition opportunities are those
+generated from the declared sequence and annotation catalogue. Omitted
+opportunities have zero rate.
+
+Each identified variable material tract has states 0 (not introduced), 1
+(present), and 2 (deleted). Its origin is assigned once, either at the root or
+on one branch. State 2 cannot return to state 1 in that positional catalogue.
+Tip absence is compatible with states 0 and 2, while tip presence requires
+state 1. DNA presence alone does not require an exon annotation at that span.
+This single-origin material process is distinct from the advanced
+`exon-locus-ctmc` model, whose declared copy opportunities can reintroduce a
+position independently on multiple branches.
+
+The root geometry is uniform over valid geometries conditional on its
+material-origin state. Material-origin scenarios have a separate prior: the
+root opportunity and each possible first-introduction branch have weight one.
+This prior does not estimate root-state frequencies. On branches, elementary
+edit opportunities have unit weight subject to the edit graph's normalization
+for multiple destinations.
+
+By default, one nonnegative scalar rate is fitted per family and shared across
+all elementary edit kinds and linked local units. Equal rates form a baseline
+for the declared edit graph; the data and design do not establish equal
+biological rates. A fixed rate file can specify rates explicitly and is used
+with `--parameter-mode fixed`. Linked units contribute a composite likelihood.
+The likelihood is conditional on the supplied tree, its branch-length unit,
+the finite catalogue, and the stated independence structure. Annotation
+discovery is not corrected for ascertainment. The model does not provide a
+significance test for exon evolution.
+
+The finite geometry catalogue is derived from observed boundaries and declared
+material-tract cuts; the model does not enumerate every possible exon boundary
+in sequence space. There is no default state-count cap. `--max-states` and
+`--max-origin-scenarios` are optional resource-abort limits. Reaching a supplied
+limit stops inference without truncating or renormalizing the catalogue or
+state space.
+`--expected-edits` reports conditional model transition counts, which are not
+counts of molecular lesions.
+
+## Interpretation
+
+Inferred boundary changes describe shifts in exon-span geometry on a common
+transcriptional axis. The registry retains the labels `acceptor_shift` and
+`donor_shift` for the two directional boundary edit classes; for terminal
+exons these remain exon-start or exon-end shifts, without inferred splice-site
+function. Split, fusion, insertion, and deletion histories depend on the
+declared candidates and material tracts. A model transition does not establish
+a molecular mechanism, transcript usage, or selection.
+
+Results remain conditional on gene-family selection, annotation quality,
+sequence correspondence, the finite catalogue, the root and branch priors,
+and the supplied tree. Local unknown states are retained as unknown; they are
+not converted to absence.

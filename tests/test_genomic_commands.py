@@ -143,12 +143,12 @@ class GenomicCommandTests(unittest.TestCase):
                     with self.assertRaisesRegex(SystemExit, "lacks a branch length"):
                         validate_input_paths(args)
 
-    def test_raw_genomic_analyze_defaults_to_dna_presence(self):
+    def test_raw_genomic_analyze_defaults_to_exon_structure(self):
         args = build_parser().parse_args([
             "analyze", "--fasta", "genomes", "--gff", "annotations",
             "--species-tree", "tree.nwk", "--output-dir", "result",
         ])
-        self.assertEqual(args.model, "dna-presence-ctmc")
+        self.assertEqual(args.model, "exon-structure-ctmc")
         validate_arguments(args)
 
     def test_locus_input_selects_the_explicit_advanced_model(self):
@@ -161,14 +161,14 @@ class GenomicCommandTests(unittest.TestCase):
     def test_fixed_rates_are_paired_and_root_modes_are_explicit(self):
         parser = build_parser()
         args = parser.parse_args([
-            "analyze", "--fasta", "genomes", "--gff", "annotations",
+            "analyze", "--model", "dna-presence-ctmc", "--fasta", "genomes", "--gff", "annotations",
             "--species-tree", "tree.nwk", "--output-dir", "result",
             "--dna-gain-rate", "0.1",
         ])
         with self.assertRaisesRegex(ValueError, "must be supplied together"):
             validate_arguments(args)
         args = parser.parse_args([
-            "analyze", "--fasta", "genomes", "--gff", "annotations",
+            "analyze", "--model", "dna-presence-ctmc", "--fasta", "genomes", "--gff", "annotations",
             "--species-tree", "tree.nwk", "--output-dir", "result",
             "--root-frequency", "fixed", "--root-presence", "0.25",
             "--dna-gain-rate", "0.1", "--dna-loss-rate", "0.2",
@@ -176,7 +176,7 @@ class GenomicCommandTests(unittest.TestCase):
         validate_arguments(args)
         for endpoint in ("0", "1"):
             edge_args = parser.parse_args([
-                "analyze", "--fasta", "genomes", "--gff", "annotations",
+                "analyze", "--model", "dna-presence-ctmc", "--fasta", "genomes", "--gff", "annotations",
                 "--species-tree", "tree.nwk", "--output-dir", "result",
                 "--root-frequency", "fixed", "--root-presence", endpoint,
             ])
@@ -276,7 +276,7 @@ class GenomicCommandTests(unittest.TestCase):
             evidence, result = root / "evidence", root / "result"
             self.assertEqual(main(["prepare-genomic-evidence", "--input-dir", str(prepared),
                                    "--output-dir", str(evidence)]), 0)
-            self.assertEqual(main(["analyze", "--input-dir", str(prepared),
+            self.assertEqual(main(["analyze", "--model", "dna-presence-ctmc", "--input-dir", str(prepared),
                                    "--genomic-evidence-dir", str(evidence),
                                    "--output-dir", str(result), "--root-frequency", "fixed",
                                    "--root-presence", ".5", "--dna-gain-rate", ".1",
@@ -294,7 +294,7 @@ class GenomicCommandTests(unittest.TestCase):
             self.assertEqual(tip_probabilities, {"A": 1.0, "B": 0.0})
             member_rows = read_tsv(evidence / "genomic_members.tsv")
             write_tsv(evidence / "genomic_members.tsv", member_rows[:-1], list(member_rows[0]))
-            self.assertEqual(main(["analyze", "--input-dir", str(prepared),
+            self.assertEqual(main(["analyze", "--model", "dna-presence-ctmc", "--input-dir", str(prepared),
                                    "--genomic-evidence-dir", str(evidence),
                                    "--output-dir", str(root / "mismatch_result"),
                                    "--dna-gain-rate", ".1", "--dna-loss-rate", ".1"]), 2)
@@ -309,7 +309,7 @@ class GenomicCommandTests(unittest.TestCase):
             observations = read_tsv(evidence / "dna_observations.tsv")
             self.assertEqual({row["species"]: row["state"] for row in observations},
                              {"A": "1", "B": "unknown"})
-            self.assertEqual(main(["analyze", "--input-dir", str(prepared),
+            self.assertEqual(main(["analyze", "--model", "dna-presence-ctmc", "--input-dir", str(prepared),
                                    "--genomic-evidence-dir", str(evidence),
                                    "--output-dir", str(result)]), 0)
             fit = json.loads((result / "dna_fit.json").read_text(encoding="utf-8"))

@@ -50,9 +50,9 @@ def result_model(result_dir):
         data = json.loads(manifest.read_text(encoding="utf-8"))
         model = data.get("model")
         status = data.get("status")
-        if status != "completed" and not (model in {"dna-presence-ctmc", "intron-position-ctmc"} and status == "completed_with_unresolved"):
+        if status != "completed" and not (model in {"dna-presence-ctmc", "intron-position-ctmc", "exon-structure-ctmc"} and status == "completed_with_unresolved"):
             raise ValueError("cannot render an incomplete run")
-        if model not in {"parsimony", "er-ard", "foreground", "experimental-multicopy", "exon-parsimony", "exon-ctmc", "exon-locus-ctmc", "dna-presence-ctmc", "intron-position-ctmc"}:
+        if model not in {"parsimony", "er-ard", "foreground", "experimental-multicopy", "exon-parsimony", "exon-ctmc", "exon-locus-ctmc", "exon-structure-ctmc", "dna-presence-ctmc", "intron-position-ctmc"}:
             raise ValueError(f"invalid run result model: {model!r}")
         return model
     parameters = directory / "run_parameters.json"

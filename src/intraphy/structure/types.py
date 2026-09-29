@@ -180,6 +180,7 @@ class Catalogue:
     discovery: str = "annotation_discovered"
     boundary_candidates: tuple[ExonSpan, ...] = ()
     insertion_payloads: tuple[InsertionPayload, ...] = ()
+    observation_unit: str = "transcript_configuration"
 
     def __post_init__(self) -> None:
         if not self.family or not self.unit:
@@ -188,6 +189,8 @@ class Catalogue:
             raise ValueError("Catalogue status must be qualified or unresolved")
         if self.discovery not in {"annotation_discovered", "independent_catalogue"}:
             raise ValueError("An explicit supported discovery scheme is required")
+        if self.observation_unit not in {"transcript_configuration", "genomic_exon_spans"}:
+            raise ValueError("Unsupported catalogue observation unit")
         if type(self.alignment_offset) is not int or self.alignment_offset < 0:
             raise ValueError("Alignment offset must be a nonnegative integer")
         if type(self.length) is not int or self.length < 1:

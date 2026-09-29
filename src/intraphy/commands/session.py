@@ -19,6 +19,7 @@ OWNERS = {"execution.json", "run_result.json", "case_build_report.tsv", "case_pr
           "genomic_sites.tsv", "genomic_members.tsv", "dna_observations.tsv", "dna_fit.json", "dna_history.json",
           "intron_families.tsv", "intron_positions.tsv", "intron_observations.tsv", "intron_alignment.tsv",
           "intron_fit.json", "intron_history.json"}
+OWNERS.update({"exon_structure_fit.json", "exon_history.json", "exon_configurations.jsonl"})
 
 
 def _write_json(path, data):
@@ -82,7 +83,9 @@ def command_session(args):
             print(f"IntraPhy: {args.command} -> {directory}", file=sys.stderr)
         if getattr(args, 'analysis_range', 'all') != 'all':
             logger.warning("Coverage subset requested; the threshold has no calibrated biological interpretation")
-        if getattr(args, 'model', 'parsimony') in {'er-ard', 'foreground', 'exon-ctmc', 'dna-presence-ctmc', 'intron-position-ctmc'}:
+        if getattr(args, 'model', 'parsimony') == 'exon-structure-ctmc':
+            logger.warning("Exon-structure estimates are conditional on the mapped finite catalogue and use a composite likelihood for linked local units")
+        elif getattr(args, 'model', 'parsimony') in {'er-ard', 'foreground', 'exon-ctmc', 'dna-presence-ctmc', 'intron-position-ctmc'}:
             logger.warning("CTMC results are conditional; finite-sample LRT calibration remains unassessed")
         yield
         state['status'] = 'completed'

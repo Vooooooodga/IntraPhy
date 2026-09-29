@@ -34,38 +34,83 @@ transcript records covering the same DNA must be deduplicated by physical
 interval when defining copy units. Lack of an annotation alone does not
 establish DNA absence. Ambiguous alignment or unsurveyed sequence is unknown.
 
-## Automatic DNA-presence histories
+## Default exon-structure histories
 
 ```bash
 intraphy analyze --fasta genomes --gff annotations \
+  --orthologs families --species-tree tree.nwk --output-dir exon_result
+```
+
+The default model is `exon-structure-ctmc`. It maps annotated physical exon
+spans using genomic sequence similarity and local genomic geometry, then fits
+the finite edit graph over the supplied tree. Identical physical intervals
+listed by multiple transcripts are deduplicated. Distinct overlapping
+annotations remain separately represented; conflicting evidence can leave a
+local observation unknown. Missing annotations are unknown. This includes
+annotated terminal and UTR exons; an exon end alone does not imply splice
+function.
+
+The default fit estimates one nonnegative scalar rate per family, shared across
+all elementary edit kinds and linked local units. Linked units contribute a
+composite likelihood. The root geometry prior is uniform over valid geometries
+conditional on material origin. Separately, each root or branch
+material-origin opportunity has weight one. Rates are conditional on the finite
+mapped catalogue and supplied tree. Equal rates provide a constrained baseline
+for this edit graph; they do not establish equal biological rates. The model
+does not estimate root frequencies or perform a significance test. Annotation
+discovery is not corrected for ascertainment, and inferred counts are model
+transitions rather than molecular lesions. See the
+[genomic exon-span model](genomic_exon_model.md).
+
+No state-count cap is imposed by default. `--max-states` and
+`--max-origin-scenarios` provide explicit stopping limits. To reuse a genomic
+exon catalogue, supply `--exon-configurations` with `--input-dir`; every record
+must declare `observation_unit="genomic_exon_spans"`. Legacy transcript-path
+catalogues are rejected for this route. A fixed rate file requires
+`--exon-rates FILE --parameter-mode fixed`.
+`--threads` parallelizes independent family fits; whole-locus alignment and
+catalogue preparation currently run serially with MAFFT using one thread.
+
+```bash
+intraphy analyze --input-dir prepared_case \
+  --exon-configurations exon_configurations.jsonl \
+  --output-dir exon_result
+```
+
+An optional `--species-tree` replaces the prepared tree only when it has the
+same tip labels. Its topology and branch lengths condition inference. Without
+catalogue reuse, MAFFT and minimap2 are required for family alignment and
+nucleotide correspondence.
+
+## Separate DNA-presence histories
+
+```bash
+intraphy analyze --model dna-presence-ctmc --fasta genomes --gff annotations \
   --orthologs families --species-tree tree.nwk --output-dir dna_result
 ```
 
-The genomic-input default is `dna-presence-ctmc`. It infers binary presence
-histories for qualified cross-species position-homology groups, with family-
-shared gain and loss rates and an observed-at-least-one ascertainment condition.
-Unqualified candidates and failed/over-budget surveys remain `unknown`; a
-second optimal placement is ambiguous and also remains unknown. The bounded
-survey covers selected sequence pairs, not genome-wide search space. The
-default root distribution is stationary;
-`--root-frequency fixed --root-presence P` supplies a fixed root presence
-probability. `--dna-gain-rate` and `--dna-loss-rate` must be supplied together
-to evaluate fixed rates. Rates use the branch-length units of the supplied
-rooted tree, whose non-root branches must have explicit lengths. `--expected-edits`
-optionally reports conditional transition counts.
+This explicit model infers binary histories for qualified cross-species DNA
+position-homology groups, with family-shared gain and loss rates and an
+observed-at-least-one ascertainment condition. Unqualified candidates and
+failed or over-budget surveys remain unknown; a second optimal placement is
+ambiguous and also remains unknown. The bounded survey covers selected
+sequence pairs, not genome-wide search space. The default root distribution is
+stationary; `--root-frequency fixed --root-presence P` supplies a fixed root
+presence probability. `--dna-gain-rate` and `--dna-loss-rate` must be supplied
+together to evaluate fixed rates. Rates use the branch-length units of the
+supplied rooted tree, whose non-root branches must have explicit lengths.
+`--expected-edits` optionally reports conditional transition counts.
 
-The histories describe DNA-position presence gains and losses. They do not
-infer a duplication source or molecular mechanism. Annotation exon/intron
-boundaries remain descriptors, and DNA presence alone cannot identify intron-
-loss exon fusion, boundary shifts, or exonization when homologous DNA remains.
-No transcript usage or complete intragenic-structure history is inferred.
+These histories describe DNA-position presence changes and do not identify a
+molecular duplication source or mechanism. They do not estimate exon boundary
+displacement, transcript use, or splicing.
 
 For staged reuse:
 
 ```bash
 intraphy prepare-genomic-evidence --input-dir prepared_case \
   --output-dir dna_evidence --threads 8
-intraphy analyze --input-dir prepared_case --genomic-evidence-dir dna_evidence \
+intraphy analyze --model dna-presence-ctmc --input-dir prepared_case --genomic-evidence-dir dna_evidence \
   --output-dir dna_result
 ```
 

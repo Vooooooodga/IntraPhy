@@ -6,6 +6,7 @@ from .file_inputs import add_file_inputs
 from ..verification.exon_cases import SCENARIOS
 
 MODELS = ("exon-locus-ctmc", "exon-parsimony", "exon-ctmc")
+EXON_STRUCTURE_MODEL = "exon-structure-ctmc"
 DNA_PRESENCE_MODEL = "dna-presence-ctmc"
 INTRON_POSITION_MODEL = "intron-position-ctmc"
 
@@ -26,7 +27,7 @@ class _AnalyzeModelAction(argparse.Action):
         setattr(namespace, self.dest, value)
         namespace._model_explicit = True
         if not getattr(namespace, "_root_frequency_explicit", False):
-            namespace.root_frequency = "stationary" if value in {DNA_PRESENCE_MODEL, INTRON_POSITION_MODEL} else "estimated"
+            namespace.root_frequency = "stationary" if value in {DNA_PRESENCE_MODEL, INTRON_POSITION_MODEL} else (None if value == EXON_STRUCTURE_MODEL else "estimated")
 
 
 class _RootFrequencyAction(argparse.Action):
@@ -35,26 +36,39 @@ class _RootFrequencyAction(argparse.Action):
         namespace._root_frequency_explicit = True
 
 
+class _RootPresenceAction(argparse.Action):
+    def __call__(self, parser, namespace, value, option_string=None):
+        setattr(namespace, self.dest, value)
+        namespace._root_presence_explicit = True
+
+
+class _TrackedValueAction(argparse.Action):
+    def __call__(self, parser, namespace, value, option_string=None):
+        setattr(namespace, self.dest, value)
+        setattr(namespace, f"_{self.dest}_explicit", True)
+
+
 def add_dna_observation_options(command):
-    command.add_argument("--survey-min-identity", type=float, default=.7,
+    command.add_argument("--survey-min-identity", type=float, default=.7, action=_TrackedValueAction,
                          help="Minimum identity for a qualified DNA position-homology observation.")
-    command.add_argument("--survey-min-coverage", type=float, default=.8,
+    command.add_argument("--survey-min-coverage", type=float, default=.8, action=_TrackedValueAction,
                          help="Minimum aligned coverage for a qualified DNA position-homology observation.")
-    command.add_argument("--survey-max-dp-cells", type=int, default=250000,
+    command.add_argument("--survey-max-dp-cells", type=int, default=250000, action=_TrackedValueAction,
                          help="Pairwise alignment cell budget; over-budget candidates remain unknown.")
 
 
 def add_intron_observation_options(command):
-    command.add_argument("--intron-anchor-window", type=int, default=15,
+    command.add_argument("--intron-anchor-window", type=int, default=15, action=_TrackedValueAction,
                          help="Maximum aligned amino-acid columns on each flank used to identify corresponding intron positions.")
-    command.add_argument("--intron-min-anchor-pairs", type=int, default=8,
+    command.add_argument("--intron-min-anchor-pairs", type=int, default=8, action=_TrackedValueAction,
                          help="Minimum paired alignment columns required to qualify an intron position.")
 
 
 def add_configuration_options(command):
     command.add_argument("--exon-configurations", help="Explicit exon-configuration JSONL catalogue.")
-    command.add_argument("--exon-rates", help="Explicit fixed-rate JSON for exon-ctmc; no invented default estimates.")
-    command.add_argument("--observation-view", choices=("evidence", "annotation"), default="evidence")
+    command.add_argument("--exon-rates", help="Explicit rate JSON; exon-structure-ctmc requires --parameter-mode fixed.")
+    command.add_argument("--observation-view", choices=("evidence", "annotation"), default="evidence",
+                         action=_TrackedValueAction)
     command.add_argument("--max-states", type=int, default=None, help="Optional finite candidate-state limit; exceeding it stops inference.")
     command.add_argument("--max-origin-scenarios", type=int, default=None,
                          help="Optional origin-scenario limit; exceeding it stops inference.")
@@ -74,25 +88,26 @@ def add_configuration_options(command):
 def add_exon_commands(sub):
     from .exon_statistics import add_statistics_commands
     add_statistics_commands(sub)
-    analyze = sub.add_parser("analyze", help="Infer a genomic DNA-presence or intron-position history, or use a supplied locus model.")
+    analyze = sub.add_parser("analyze", help="Infer exon-structure histories from genomic exon spans, or select another supported model.")
     add_file_inputs(analyze, required=False)
     analyze.add_argument("--input-dir", help="Prepared genomic case directory containing species_tree.tsv.")
     analyze.add_argument("--genomic-evidence-dir", help="Reuse staged observations from prepare-genomic-evidence for the selected character type.")
     analyze.add_argument("--locus-model", action=_LocusModelAction,
                          help="Advanced DNA-only labelled-copy JSON model (intraphy.exon-locus-model/2).")
-    analyze.add_argument("--species-tree", help="Rooted Newick or TSV tree for raw inputs or --locus-model; with --input-dir, explicitly replace its tree using the exact same tip panel.")
-    analyze.add_argument("--parameter-mode", choices=("fit", "fixed"), default="fit")
+    analyze.add_argument("--species-tree", help="Rooted Newick or TSV tree for raw inputs or --locus-model; with --input-dir, replace its tree only with the same tip panel.")
+    analyze.add_argument("--parameter-mode", choices=("fit", "fixed"), default="fit",
+                         help="Fit the default exon-structure-ctmc rate, or evaluate an explicit --exon-rates file in fixed mode.")
     analyze.add_argument("--output-dir", required=True)
     analyze.add_argument("--threads", type=int, default=1)
-    analyze.add_argument("--flank", type=int, default=1000)
-    analyze.add_argument("--max-extension", type=int, default=10000)
-    analyze.add_argument("--model", choices=(DNA_PRESENCE_MODEL, INTRON_POSITION_MODEL, *MODELS), default=DNA_PRESENCE_MODEL,
+    analyze.add_argument("--flank", type=int, default=1000, action=_TrackedValueAction)
+    analyze.add_argument("--max-extension", type=int, default=10000, action=_TrackedValueAction)
+    analyze.add_argument("--model", choices=(DNA_PRESENCE_MODEL, INTRON_POSITION_MODEL, EXON_STRUCTURE_MODEL, *MODELS), default=EXON_STRUCTURE_MODEL,
                          action=_AnalyzeModelAction,
-                         help="DNA presence is the default; select intron-position-ctmc for annotated intron boundaries; exon-locus-ctmc requires --locus-model.")
-    analyze.add_argument("--root-frequency", choices=("stationary", "fixed", "estimated"), default="stationary",
+                         help="Genomic exon-structure CTMC is the default; DNA presence, intron position, and supplied locus models are separate explicit routes.")
+    analyze.add_argument("--root-frequency", choices=("stationary", "fixed", "estimated"), default=None,
                          action=_RootFrequencyAction,
                          help="Root presence distribution for the selected binary genomic character model.")
-    analyze.add_argument("--root-presence", type=float, default=.5,
+    analyze.add_argument("--root-presence", type=float, default=.5, action=_RootPresenceAction,
                          help="Root presence probability when --root-frequency fixed is selected.")
     analyze.add_argument("--gain-rate", "--dna-gain-rate", dest="dna_gain_rate", type=float,
                          help="Fixed gain rate for the selected binary character; supply with --loss-rate. --dna-gain-rate remains an alias.")

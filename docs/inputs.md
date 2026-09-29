@@ -1,8 +1,8 @@
 The default one-command route is `intraphy analyze --fasta ... --gff ...
 --species-tree ... --output-dir ...`; add `--orthologs` for multi-gene whole-
-genome annotations. Gene-only selected loci remain unknown, not exons. For
-staged `build-case`, use `--allow-unannotated-loci` explicitly when retaining
-such loci.
+genome annotations. It maps genomic exon spans from selected annotations.
+Gene-only selected loci remain unknown, not exons. For staged `build-case`, use
+`--allow-unannotated-loci` explicitly when retaining such loci.
 
 # Genomic FASTA, annotation and a rooted tree
 
@@ -34,6 +34,25 @@ A directory of FASTA files selects several families. Each family must resolve to
 one distinct locus in every supplied species. Multiple isoforms of that same
 locus are collapsed for locus counting, preserving their IDs. A locus assigned
 to two input families is rejected.
+
+## Default exon-span observations
+
+The default `exon-structure-ctmc` model treats a physical genomic exon interval
+as its observation unit. Full annotated spans are retained, including terminal
+and UTR exons. Repeated transcript records with the same native interval are
+deduplicated. Distinct overlapping exon intervals remain distinct annotations;
+when they conflict, only the affected local correspondence is unresolved.
+Genomic sequence, coordinates, strand, and local order support correspondence.
+CDS phase is retained as annotation metadata; it does not score or qualify
+exon-span correspondence. Missing annotations and failed or ambiguous mapping
+remain unknown and do not establish genomic absence.
+
+Exon starts and ends describe boundary positions on the transcriptional axis.
+Terminal ends do not automatically represent splice donor or acceptor sites.
+Intron boundaries provide genomic context, and CDS phase is retained as
+annotation metadata. IntraPhy does not fit an independent intron-position
+model in this default route. It does not infer
+transcript usage, isoform abundance, or RNA splicing.
 
 Explicit, consistent gene records and descendant relationships are required.
 GTF/GFF lacking gene-level records must first be normalized (for example with

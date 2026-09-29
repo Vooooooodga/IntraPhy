@@ -73,35 +73,42 @@ RNA evidence constrain the scope of such annotation methods.
 
 ## Implications for IntraPhy
 
-Homology defines the unit to which a structural state refers. A DNA-presence
-observation concerns DNA at a proposed homologous interval; an intron-position
-observation concerns a corresponding splice boundary; and intron-length
-analysis concerns the size of sequence between boundaries. These estimands
-must remain separate. A match of flanking exons alone does not establish
-homology of all intervening bases.
+The default `exon-structure-ctmc` observation unit is a mapped physical genomic
+exon span. Homology is supported by genomic sequence and local geometry using
+the selected gene annotations. Repeated transcript aliases for one interval
+are deduplicated, while distinct overlapping annotations remain distinct and
+can have unresolved local structure. A missing annotation does not establish
+absence. The model follows complete exon spans, including terminal and UTR
+exons. Exon-start and exon-end displacement describe boundaries on a common
+transcriptional axis; terminal ends do not automatically carry splice donor or
+acceptor function. Genomic sequence, coordinates, strand, and local order
+support correspondence. CDS phase is retained as annotation metadata; it does
+not score or qualify correspondence.
 
-IntraPhy's genomic observation layer records evidence and unresolved states for
-candidate DNA intervals and structural features. Its binary DNA-presence CTMC
-uses state 0 for supported absence and state 1 for supported presence at a
-homologous position. A 0-to-1 change is a structural material gain at that
-position; the model does not identify duplication, transfer, or another source
-mechanism. The separate intron-position CTMC models coding continuity and
-intron interruption at positions projected through a family protein MSA;
-genomic endpoint evidence supports those latent states. It does not estimate
-RNA use, ancestral intron length, rate heterogeneity, or genome-wide intron
-density. The domain-specific evidence rules and limitations are described in the
-[intron-position method](intron_position_model.md).
+ExOrthist uses genomic coordinates together with exon sequence and flanking
+exon context to support exon-orthology inference. This provides methodological
+context for IntraPhy's genome and annotation based correspondence strategy; it
+does not validate the exon-structure CTMC, its priors, or its rate assumptions.
+[Márquez et al. 2021, *Genome Biology* 22:239](https://link.springer.com/article/10.1186/s13059-021-02441-9).
 
-The DNA-presence rate analysis conditions on the supplied species tree and
-branch lengths. It fits family-shared gain/loss rates over eligible sites, with
-an observed-presence ascertainment correction for discovered sites and
-unknown tip states treated as compatible with either state. This conditions on
-the observation mask; it does not estimate missingness or correct all
-nonrandom annotation, transcript-selection, mapping, or discovery biases.
-Eligibility and evidence review therefore remain central. A site-state change
-count, including an expected CTMC transition count, is not a count of physical
-molecular lesions. Linked sites may also make the product likelihood a
-composite rather than a fully independent-site likelihood.
+The exon-structure CTMC conditions on the supplied rooted tree, its branch
+length scale, the mapped finite catalogue, and local-unit dependence
+assumptions. It uses a uniform distribution over valid root exon geometries
+conditional on material origin. Separately, material-origin opportunities at
+the root and on each branch have unit weight. Its
+default rate fit is one nonnegative scalar shared across elementary edit
+opportunities within a family, using the composite likelihood over linked local
+units. These conventions define a baseline for the declared edit graph; they
+do not establish equal biological event rates or provide a significance test.
+Annotation discovery is not corrected for ascertainment. Conditional expected
+transition counts are model changes, not counts of physical lesions.
+
+IntraPhy also retains explicit `dna-presence-ctmc` and
+`intron-position-ctmc` analyses. They represent separate estimands: binary DNA
+presence at qualified homologous intervals, and annotated intron presence at
+aligned coding positions. They are selected explicitly and are not combined
+with exon-span histories in a joint likelihood. The intron model's observation
+rules and limitations are described in the [intron-position method](intron_position_model.md).
 
 The species-tree analysis of single-copy families and a copy/exon-tree analysis
 of duplicated exon families concern different evolutionary units. IntraPhy's
@@ -113,20 +120,18 @@ context, not automatically equivalent inputs or results.
 
 ## Implemented and prospective scope
 
-Implemented analyses report evidence-qualified structural observations and
-conditional histories under the selected tree, state model and ascertainment
-rule. DNA-presence CTMC rate estimates are conditional on included eligible
-sites, fixed branch lengths and the stated root assumption; rate diagnostics
-and data limitations must accompany interpretation. Unresolved and
-insufficient-information families do not support a fabricated finite estimate
-or ancestral history. Site-level changes are not summed into inferred mutation
-events.
+Implemented analyses report annotation-supported exon-span observations and
+conditional histories under the selected tree and finite edit graph. Linked
+units contribute a composite likelihood. DNA-presence and intron-position
+analyses retain their own observation rules when explicitly selected.
+Unresolved and insufficient-information observations remain unknown; they do
+not support a fabricated finite estimate or ancestral history.
 
-The advanced `intraphy.exon-locus-model/2` route already evaluates a supplied
-catalogue of source-qualified copy duplications and continuous shared deletion
-opportunities. Fully automatic genealogy inference, or a unified model of
-boundary, copy and length evolution, remains prospective. So do full
-reproductions of ExonEvo or MALIN and integrated models of annotation error.
+The advanced `intraphy.exon-locus-model/2` route evaluates a supplied catalogue
+of source-qualified copy duplications and continuous shared deletion
+opportunities. Fully automatic genealogy inference, unified copy and exon
+boundary evolution, integrated models of annotation error, and full
+reproductions of ExonEvo or MALIN remain prospective.
 The cited papers motivate careful homology definitions, explicit observation
 rules, sampling and rate diagnostics. They do not by themselves establish
 empirical novelty or comparative performance for IntraPhy.

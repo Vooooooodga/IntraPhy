@@ -216,7 +216,7 @@ class SpeciesTreeInputTests(unittest.TestCase):
             with patch("intraphy.commands.genomic.prepare_evidence", return_value=[]), \
                     patch("intraphy.inference.dna_presence.analyze_dna_presence",
                           side_effect=write_using_selected_tree):
-                self.assertEqual(main(["analyze", "--input-dir", str(prepared),
+                self.assertEqual(main(["analyze", "--model", "dna-presence-ctmc", "--input-dir", str(prepared),
                                        "--species-tree", str(override), "--output-dir", str(output)]), 0)
 
             written = SpeciesTree(read_tsv(output / "species_tree.tsv"))
