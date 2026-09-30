@@ -14,6 +14,12 @@ label in the case manifest has not been traced to its source orthogroup
 dataset. The supplied seven-species tree is consistent with pruning the
 current OrthoFinder species tree while preserving path lengths.
 
+The selected *Bombus terrestris* LOC100645322 / XM_048406069.1 and *B. pascuorum*
+LOC132912979 / XM_060970849.1 records carry the product label “doublesex- and
+mab-3-related transcription factor A2”; *Tetragonisca angustula* QLX08_000484
+is annotated as “hypothetical protein.” These product labels alone do not
+resolve orthology.
+
 All annotated transcripts are retained for structural display. Formal
 phylogenetic states are locus-level observations from genome sequence and
 annotation; transcript-specific sex usage is outside the available data and is
