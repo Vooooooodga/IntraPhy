@@ -1,0 +1,8 @@
+node_id	parent_id	label	branch_length
+root		root	0
+Schizosaccharomyces_japonicus	root	Schizosaccharomyces_japonicus	1
+pombe_cry_octo	root	pombe_cry_octo	1
+Schizosaccharomyces_pombe	pombe_cry_octo	Schizosaccharomyces_pombe	1
+cry_octo	pombe_cry_octo	cry_octo	1
+Schizosaccharomyces_octosporus	cry_octo	Schizosaccharomyces_octosporus	1
+Schizosaccharomyces_cryophilus	cry_octo	Schizosaccharomyces_cryophilus	1
