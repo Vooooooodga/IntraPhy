@@ -32,6 +32,18 @@ def _call(species, spans, instances, rows, *, materials=(), presence=(), partial
 
 
 class GenomicExonObservationTests(unittest.TestCase):
+    def test_complete_exon_spans_remain_separate_from_cds_subintervals(self):
+        spans = {"coding": ExonSpan(0, 12), "noncoding": ExonSpan(20, 25)}
+        instances = {
+            "coding": ExonInstance("coding", "family", "A", "locus", "contig",
+                100, 112, "+", ("tx1",), cds=((104, 109, 0),)),
+            "noncoding": _instance("noncoding", "A", 120, 125),
+        }
+        observation = _call("A", spans, instances, {"A": "A"*60, "B": "A"*60})
+        self.assertEqual(observation.configurations[0].exons,
+                         (ExonSpan(0, 12), ExonSpan(20, 25)))
+        self.assertEqual(instances["coding"].cds, ((104, 109, 0),))
+
     def test_physical_span_dedup_ignores_transcript_path_count(self):
         spans = {"e1": ExonSpan(10, 20), "e1_copy": ExonSpan(10, 20),
                  "e2": ExonSpan(30, 40)}

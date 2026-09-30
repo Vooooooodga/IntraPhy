@@ -54,8 +54,16 @@ of declared DNA tracts. The edit graph includes exon split and fusion,
 boundary shifts, exonization and inactivation, and DNA insertion or deletion;
 one deletion can alter multiple spans in one transition. Results include
 `exon_structure_fit.json`, `exon_history.json`,
-`exon_structure_summary.tsv`, and `ancestral_exon_states.tsv`; requesting
-`--expected-edits` adds `branch_exon_events.tsv`.
+`exon_structure_summary.tsv`, `ancestral_exon_states.tsv`, and the default
+`branch_exon_changes.tsv`. The branch table reports endpoint-based net
+structure and declared-DNA-presence change probabilities plus the joint modal
+parent/child configuration pairs, retaining exact ties. It does not apply a
+probability cutoff or report event counts. Coordinates are local 0-based
+half-open alignment spans; `alignment_offset` locates them on the shared
+alignment axis, while `exon_coordinates.tsv` and `exon_correspondence.tsv`
+provide links to observed native exon coordinates. DNA-presence summaries
+cover only declared material tracts. `--expected-edits` additionally writes
+`branch_exon_events.tsv` with conditional model edit counts.
 
 The finite catalogue conditions inference on supplied annotations and mapped
 exon spans. Annotation discovery is not corrected for ascertainment. Equal

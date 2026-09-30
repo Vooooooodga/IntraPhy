@@ -22,6 +22,7 @@ from ..topology import SpeciesTree
 from .configuration_model import RateModel, evaluate_model
 from .genomic_exon_rates import fit_family_rate, fixed_family_fit
 from .genomic_exon_output import assemble_rows, state_rows, write_outputs
+from .genomic_exon_branches import branch_change_rows
 
 
 MODEL = "exon-structure-ctmc"
@@ -221,6 +222,7 @@ def infer_genomic_exons(input_dir, output_dir, *, configurations=None, rates=Non
         unresolved.append({"family_id": "NA", "unit_id": "NA", "reason": "no_estimable_units"})
     fit_by_family, details, summaries, ancestral, branches = assemble_rows(
         family_results, unit_details, diagnostic_units, unresolved, all_families)
+    branch_exon_changes = branch_change_rows(family_results, unit_details, tree)
     fit_record = {"model": MODEL, "parameter_mode": parameter_mode,
         "objective_scope": "conditional_composite_likelihood_within_family_across_local_units",
         "families": fit_by_family,
@@ -248,7 +250,8 @@ def infer_genomic_exons(input_dir, output_dir, *, configurations=None, rates=Non
         "preparation": preparation_reports, "units": diagnostic_units,
         "unresolved": unresolved}
     artifacts = write_outputs(out, tree=tree_table, details=details, summaries=summaries,
-        ancestral=ancestral, branches=branches, expected_edits=expected_edits,
+        ancestral=ancestral, branches=branches, branch_exon_changes=branch_exon_changes,
+        expected_edits=expected_edits,
         fit_record=fit_record, diagnostics=diagnostics,
         preparation_artifacts=not bool(configurations))
     RunResult(MODEL, "genomic-exon-spans", "species_tree.tsv", tuple(artifacts),

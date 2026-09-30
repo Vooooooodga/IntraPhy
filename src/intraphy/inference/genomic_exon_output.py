@@ -79,7 +79,8 @@ def assemble_rows(family_results, unit_details, diagnostic_units, unresolved, al
 
 
 def write_outputs(directory, *, tree, details, summaries, ancestral, branches,
-                  expected_edits, fit_record, diagnostics, preparation_artifacts=False):
+                  branch_exon_changes, expected_edits, fit_record, diagnostics,
+                  preparation_artifacts=False):
     write_json(directory/"exon_structure_fit.json", fit_record)
     write_json(directory/"exon_history.json", {"model": "exon-structure-ctmc",
         "tree": tree, "observation_unit": "genomic_exon_spans", "units": details})
@@ -87,8 +88,18 @@ def write_outputs(directory, *, tree, details, summaries, ancestral, branches,
            ["family_id", "unit_id", "status", "log_likelihood", "unknown_tips"])
     _table(directory, "ancestral_exon_states.tsv", ancestral,
            ["family_id", "unit_id", "node", "state_id", "state_index", "probability"])
+    _table(directory, "branch_exon_changes.tsv", branch_exon_changes,
+           ["family_id", "unit_id", "parent_node_id", "child_node_id",
+            "descendant_species", "probability_exon_structure_change",
+            "probability_dna_presence_change", "dna_presence_scope",
+            "joint_configuration_probability",
+            "parent_exons", "child_exons", "parent_dna_presence", "child_dna_presence",
+            "material_ids", "changed_material_tracts",
+            "change_classification", "coordinate_system", "alignment_offset",
+            "interpretation_scope"])
     artifacts = ["exon_structure_fit.json", "exon_history.json", "exon_structure_summary.tsv",
-        "ancestral_exon_states.tsv", "model_diagnostics.json", "species_tree.tsv", "exon_configurations.jsonl"]
+        "ancestral_exon_states.tsv", "branch_exon_changes.tsv", "model_diagnostics.json",
+        "species_tree.tsv", "exon_configurations.jsonl"]
     if preparation_artifacts:
         artifacts.extend(["exon_correspondence.tsv", "exon_coordinates.tsv",
                           "exon_preparation_summary.tsv", "annotation_structure_candidates.tsv",

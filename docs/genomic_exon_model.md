@@ -72,6 +72,31 @@ state space.
 `--expected-edits` reports conditional model transition counts, which are not
 counts of molecular lesions.
 
+Every run writes `branch_exon_changes.tsv` from the existing CTMC joint
+endpoint probabilities. It summarizes the probability of exon-span structure
+change and declared material-tract DNA-presence change on each branch, and
+lists the joint modal observable parent/child configurations. Hidden material
+states 0 (unintroduced) and 2 (deleted) are both reported as absent. Every
+exactly tied joint mode is retained; no probability cutoff is applied. The
+reported configurations are endpoint net differences and do not estimate the
+number of transitions or a molecular mechanism. DNA-presence probabilities
+cover only material tracts declared in the local catalogue, not all DNA or
+coding sequence.
+
+`change_classification` describes endpoint geometry. `net_split` and
+`net_fusion` require matching outer span boundaries for a one-to-many or
+many-to-one overlap group. `boundary_change`, `span_gain`, and `span_loss`
+describe the corresponding span differences. When a declared DNA tract
+changes with a split/fusion group, the classification is `complex_change` and
+`dna_coupled`. These labels summarize endpoint differences and do not infer
+the path or number of evolutionary changes. Tied modal rows are alternative
+joint endpoint explanations and must not be added as event counts.
+
+Exon spans use local alignment coordinates, 0-based and half-open, with
+`alignment_offset` locating the local unit on its shared alignment axis. For
+observed native exon coordinates, join the family/unit and local span through
+`exon_coordinates.tsv` and `exon_correspondence.tsv`.
+
 ## Interpretation
 
 Inferred boundary changes describe shifts in exon-span geometry on a common

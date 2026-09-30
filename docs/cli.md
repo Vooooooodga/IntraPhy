@@ -62,6 +62,17 @@ discovery is not corrected for ascertainment, and inferred counts are model
 transitions rather than molecular lesions. See the
 [genomic exon-span model](genomic_exon_model.md).
 
+Every default genomic exon run writes `branch_exon_changes.tsv`. It reports
+branch probabilities for exon-span structure change and declared material-tract
+DNA-presence change, along with joint modal endpoint configurations and every
+exact tie. It uses no probability threshold and does not count branch events.
+Reported spans are local alignment coordinates (0-based, half-open); use
+`alignment_offset` with `exon_coordinates.tsv` and
+`exon_correspondence.tsv` to connect them to native exon coordinates. DNA
+presence is summarized only for declared material tracts. `--expected-edits`
+additionally writes `branch_exon_events.tsv` with conditional model transition
+counts.
+
 No state-count cap is imposed by default. `--max-states` and
 `--max-origin-scenarios` provide explicit stopping limits. To reuse a genomic
 exon catalogue, supply `--exon-configurations` with `--input-dir`; every record
