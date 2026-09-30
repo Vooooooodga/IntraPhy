@@ -19,7 +19,8 @@ def required_tools(args):
     intron_preparation = (args.command == "analyze" and getattr(args, "model", None) == "intron-position-ctmc"
                           and not getattr(args, "genomic_evidence_dir", None))
     genomic_exon_preparation = (args.command == "analyze" and getattr(args, "model", None) == "exon-structure-ctmc"
-                                and not getattr(args, "exon_configurations", None))
+                                and not getattr(args, "exon_configurations", None)
+                                and not getattr(args, "alignment_evidence_dir", None))
     if args.command in {"build-case", "derive-tables"} or raw_analyze:
         names.add("mafft")  # Family protein alignment and exon-pair alignment.
         names.add(getattr(args, "context_aligner", "minimap2"))

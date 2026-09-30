@@ -18,7 +18,8 @@ def _table(path, rows, fields):
 def prepare_configurations(input_dir: str | Path, output_dir: str | Path, *,
                            timeout=600, max_locus_bases=100000,
                            minimum_identity=.7, anchor_bases=12, anchor_identity=.8,
-                           observation_unit="transcript_configuration", threads=1):
+                           observation_unit="transcript_configuration", threads=1,
+                           alignment_evidence_dir=None):
     if type(threads) is not int or threads < 1:
         raise ValueError("threads must be a positive integer")
     out = Path(output_dir)
@@ -28,6 +29,7 @@ def prepare_configurations(input_dir: str | Path, output_dir: str | Path, *,
         grouped[locus.family].append(locus)
     catalogues, correspondences, candidates, coords, reports, coding = [], [], [], [], [], []
     coding_projection_records = 0
+    reused_families = []
     for number, (family, loci) in enumerate(sorted(grouped.items()), 1):
         # Filesystem names do not use untrusted gene/annotation strings.
         directory = out/"alignment_evidence"/f"family_{number:05d}"
@@ -37,7 +39,13 @@ def prepare_configurations(input_dir: str | Path, output_dir: str | Path, *,
                                **native_cds(locus, tx)})
         try:
             alignment = align_family(tuple(loci), directory, timeout=timeout,
-                                     max_bases=max_locus_bases, threads=threads)
+                                     max_bases=max_locus_bases, threads=threads,
+                                     evidence_dir=(Path(alignment_evidence_dir) / f"family_{number:05d}"
+                                                   if alignment_evidence_dir is not None else None))
+            if alignment.reuse_provenance is not None:
+                reused_families.append({"family_id": family,
+                    "source_family_directory": f"family_{number:05d}",
+                    "commands": alignment.reuse_provenance})
             alignment, protein = check_coding_projection(alignment, input_dir)
             coding_projection_records += len(protein)
             cs, matches, predictions, coordinates = build_catalogues(alignment,
@@ -74,7 +82,7 @@ def prepare_configurations(input_dir: str | Path, output_dir: str | Path, *,
     _table(out/"annotation_structure_candidates.tsv", candidates, ["family_id", "unit_id", "species", "source_species", "source_transcript", "status"])
     _table(out/"exon_coordinates.tsv", coords, ["family_id", "unit_id", "species", "exon_id", "coordinate_system"])
     _table(out/"exon_preparation_summary.tsv", reports, ["family_id", "status", "units", "qualified_units", "reason", "evidence_directory"])
-    write_json(out/"exon_evidence_policy.json", {"observation_unit": observation_unit,
+    policy = {"observation_unit": observation_unit,
         "minimum_nucleotide_identity": minimum_identity,
         "gap_anchor_bases": anchor_bases, "gap_anchor_identity": anchor_identity,
         "protein_projection_agreement": .95, "thresholds_biologically_calibrated": False,
@@ -91,5 +99,11 @@ def prepare_configurations(input_dir: str | Path, output_dir: str | Path, *,
         "copy_and_orientation_audit": "minimap2 plus exact short-exon search",
         "discovery": "annotation_discovered", "reference_is_ancestor": False,
         "transcript_ids_are_provenance_only": observation_unit == "genomic_exon_spans",
-        "required_inputs": "genomic sequence, exon annotations and species tree; no RNA measurements"})
+        "required_inputs": "genomic sequence, exon annotations and species tree; no RNA measurements"}
+    policy["alignment_evidence_reuse"] = (None if alignment_evidence_dir is None else {
+        "source_directory": str(Path(alignment_evidence_dir).resolve()),
+        "reuse_only": True,
+        "new_external_commands_executed": False,
+        "families": reused_families})
+    write_json(out/"exon_evidence_policy.json", policy)
     return tuple(catalogues), reports

@@ -79,8 +79,11 @@ def infer_genomic_exons(input_dir, output_dir, *, configurations=None, rates=Non
                         parameter_mode="fit", species_tree=None, max_states=None,
                         max_origins=None, branch_length_mode="supplied", expected_edits=False,
                         alignment_timeout=600, max_locus_bases=100000, exon_identity=.7,
-                        anchor_bases=12, anchor_identity=.8, threads=1):
+                        anchor_bases=12, anchor_identity=.8, threads=1,
+                        alignment_evidence_dir=None):
     """Infer physical exon-span histories with one shared rate per family."""
+    if configurations and alignment_evidence_dir:
+        raise ValueError("alignment_evidence_dir and exon configurations are mutually exclusive")
     if parameter_mode not in {"fit", "fixed"}:
         raise ValueError("parameter_mode must be 'fit' or 'fixed'")
     if parameter_mode == "fixed" and not rates:
@@ -106,7 +109,7 @@ def infer_genomic_exons(input_dir, output_dir, *, configurations=None, rates=Non
             timeout=alignment_timeout, max_locus_bases=max_locus_bases,
             minimum_identity=exon_identity, anchor_bases=anchor_bases,
             anchor_identity=anchor_identity, observation_unit="genomic_exon_spans",
-            threads=threads)
+            threads=threads, alignment_evidence_dir=alignment_evidence_dir)
     catalogues = validate_collection(tuple(catalogues), allow_empty=True)
     if any(c.observation_unit != "genomic_exon_spans" for c in catalogues):
         raise ValueError("Genomic exon inference requires genomic_exon_spans catalogues")

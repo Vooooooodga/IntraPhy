@@ -11,6 +11,7 @@ from intraphy.inference import genomic_exon_calibration as calibration
 from intraphy.inference.configuration_model import RateModel
 from intraphy.inference.exon_rates import InferenceUnit
 from intraphy.inference.exon_resampling import sample_unit_history, simulate_unit
+from intraphy.inference.genomic_exon_rates import fit_family_rate
 from intraphy.verification.genomic_exon_calibration import score_replicate, summarize_arm
 from intraphy.structure.edits import EDIT_KINDS
 from intraphy.structure.space import enumerate_space
@@ -95,6 +96,51 @@ class GenomicExonCalibrationTests(unittest.TestCase):
             self.assertFalse(metadata["discovery_pipeline_calibrated"])
             self.assertEqual(metadata["generating_model"]["rates"]["split"], .2)
             self.assertIn("each other canonical node", metadata["material_origin_sampling"])
+
+    def test_all_empty_shared_deletion_tips_withhold_rate_at_finite_tail_probe(self):
+        units = []
+        for index in range(8):
+            catalogue = calibration._catalogues("shared-deletion")[index % 2]
+            space = enumerate_space(catalogue)
+            template = calibration._unit(catalogue, space, catalogue.unit)
+            empty = np.asarray([float(calibration._visible(state) == ((), (0,)))
+                                for state in space.states])
+            self.assertTrue(np.any(empty))
+            units.append({"space": space, "tree": template.tree,
+                "tips": {species: empty.copy() for species in template.tips}})
+
+        fit = fit_family_rate(units)
+        self.assertEqual(fit["status"], "upper_tail_unresolved")
+        self.assertFalse(fit["converged"])
+        self.assertIsNone(fit["mu"])
+        diagnostic = fit["upper_tail_diagnostic"]
+        self.assertEqual(diagnostic["x_probe"],
+                         2. * max(fit["selected_candidate"]["x"], 100.))
+        self.assertIsNotNone(diagnostic["log_likelihood"])
+        self.assertIn("finite_probe_only", diagnostic["scope"])
+
+    def test_finite_high_rate_peak_passes_tail_probe(self):
+        unit = self.template()
+        fit_unit = {"space": unit.space, "tree": unit.tree, "tips": unit.tips}
+        exposure = sum(unit.tree.branch_length(child) for _, child in unit.tree.edges())
+
+        def peaked_likelihood(space, tree, tips, model, **kwargs):
+            x = next(iter(model.rates.values())) * exposure
+            return {"log_likelihood": -(x - 250.) ** 2}
+
+        with mock.patch("intraphy.inference.genomic_exon_rates.evaluate_model",
+                        side_effect=peaked_likelihood):
+            fit = fit_family_rate([fit_unit])
+        self.assertEqual(fit["status"], "estimated_conditional_composite_rate")
+        self.assertTrue(fit["converged"])
+        self.assertAlmostEqual(fit["dimensionless_rate_x"], 250., places=3)
+        self.assertGreater(fit["dimensionless_rate_x"], 200.)
+        self.assertGreater(fit["upper_tail_diagnostic"]["x_probe"],
+                           fit["dimensionless_rate_x"])
+        self.assertLess(fit["upper_tail_diagnostic"]["log_likelihood"],
+                        fit["log_likelihood"])
+        self.assertEqual(fit["upper_tail_diagnostic"]["reason"], "lower_probe")
+        self.assertIn("finite_probe_only", fit["upper_tail_diagnostic"]["scope"])
 
     def test_zero_rate_nonidentified_replicates_remain_and_fixed_arm_scores(self):
         with tempfile.TemporaryDirectory() as temporary, \

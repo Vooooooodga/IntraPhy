@@ -52,7 +52,7 @@ class GenomicExonFitTests(unittest.TestCase):
     def test_discordant_single_unit_has_no_finite_rate_identification(self):
         with patch("intraphy.inference.genomic_exon_rates.evaluate_model", _analytic_log_likelihood):
             fit = fit_family_rate([_unit(1., "discordant")])
-        self.assertIn(fit["status"], {"flat_or_nonidentified", "optimizer_unresolved_higher_failed_candidate"})
+        self.assertEqual(fit["status"], "upper_tail_unresolved")
         self.assertIsNone(fit.get("mu"))
 
     def test_one_variable_and_constant_units_identify_finite_positive_rate(self):

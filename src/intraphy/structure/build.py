@@ -12,12 +12,26 @@ from .alternatives import structure_alternatives
 from .genomic_observations import genomic_span_observation
 
 
-def _components(alignment: FamilyAlignment):
+def _gap_evidence(rows, flank, identity):
+    qualified, unsupported = set(), defaultdict(list)
+    for species, row in rows.items():
+        for match in re.finditer("-+", row):
+            interval = (match.start(), match.end())
+            if gap_supported(rows, species, interval[0], interval[1], flank, identity):
+                qualified.add(interval)
+            else:
+                unsupported[species].append(interval)
+    return tuple(sorted(qualified)), {s: tuple(v) for s, v in unsupported.items()}
+
+
+def _components(alignment: FamilyAlignment, qualified_gaps):
     exons = [(e.id, alignment.exons[e.id].start, alignment.exons[e.id].end)
              for locus in alignment.loci for e in locus.exons]
-    # A continuous indel spanning several exons must keep them in one unit.
-    gaps = sorted({(m.start(), m.end()) for row in alignment.rows.values() for m in re.finditer("-+", row)
-                   if any(a < m.end() and m.start() < b for _, a, b in exons)})
+    # Genomic-span callers pass supported gaps only; legacy callers can retain
+    # their prior all-gap connectivity. Unsupported genomic gaps cannot imply
+    # a shared event and remain observation-local uncertainty.
+    gaps = sorted({(a, b) for a, b in qualified_gaps
+                   if any(x < b and a < y for _, x, y in exons)})
     intervals = sorted([(a, b, eid) for eid, a, b in exons] + [(a, b, None) for a, b in gaps],
                        key=lambda x: (x[0], x[1], x[2] or ""))
     groups, current = [], []
@@ -96,7 +110,14 @@ def build_catalogues(alignment: FamilyAlignment, *, minimum_identity: float = .7
         raise ValueError("Invalid explicitly declared evidence thresholds")
     if observation_unit not in {"transcript_configuration", "genomic_exon_spans"}:
         raise ValueError("Unsupported catalogue observation unit")
-    components, gaps = _components(alignment)
+    if observation_unit == "genomic_exon_spans":
+        component_gaps, unsupported_gaps = _gap_evidence(
+            alignment.rows, anchor_bases, anchor_identity)
+    else:
+        component_gaps = tuple(sorted({(match.start(), match.end())
+            for row in alignment.rows.values() for match in re.finditer("-+", row)}))
+        unsupported_gaps = {}
+    components, gaps = _components(alignment, component_gaps)
     instances = {e.id: e for l in alignment.loci for e in l.exons}
     catalogues, correspondence, candidates, coordinates = [], [], [], []
     for number, (start, end, ids) in enumerate(components, 1):
@@ -142,6 +163,15 @@ def build_catalogues(alignment: FamilyAlignment, *, minimum_identity: float = .7
                     anchor_identity=anchor_identity)
                 native_configs, kind = observation.configurations, observation.kind
                 local_reasons, unknown = list(observation.reasons), observation.unknown_intervals
+                unsupported_local = tuple(sorted({ExonSpan(max(start, a)-start, min(end, b)-start)
+                    for a, b in unsupported_gaps.get(species, ())
+                    if max(start, a) < min(end, b)}))
+                if unsupported_local:
+                    unknown = tuple(sorted(set(unknown) | set(unsupported_local)))
+                    local_reasons = sorted(set(local_reasons) | {"unsupported_alignment_gap"})
+                    kind = "partial" if kind == "observed" else kind
+                    observation = replace(observation, kind=kind,
+                        reasons=tuple(local_reasons), unknown_intervals=unknown)
                 if fatal:
                     kind = "excluded"
                     observation = replace(observation, kind=kind,

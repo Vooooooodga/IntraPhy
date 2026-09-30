@@ -8,7 +8,13 @@ from ..topology import SpeciesTree
 
 def validate_analysis_options(args):
     if getattr(args, "command", None) != "analyze" or getattr(args, "model", None) != "exon-structure-ctmc":
+        if getattr(args, "alignment_evidence_dir", None):
+            raise ValueError("--alignment-evidence-dir requires --model exon-structure-ctmc.")
         return
+    if getattr(args, "alignment_evidence_dir", None) and getattr(args, "exon_configurations", None):
+        raise ValueError("--alignment-evidence-dir and --exon-configurations are mutually exclusive.")
+    if getattr(args, "alignment_evidence_dir", None) and not getattr(args, "input_dir", None):
+        raise ValueError("--alignment-evidence-dir reuse requires prepared --input-dir inputs.")
     if getattr(args, "locus_model", None):
         raise ValueError("--locus-model requires --model exon-locus-ctmc.")
     if getattr(args, "genomic_evidence_dir", None):
@@ -108,6 +114,11 @@ def validate_input_paths(args):
             raise ValueError("--exon-configurations reuse requires --input-dir prepared inputs.")
         if getattr(args, "_flank_explicit", False) or getattr(args, "_max_extension_explicit", False):
             raise ValueError("--flank and --max-extension apply only while preparing raw genomic inputs.")
+        if getattr(args, "alignment_evidence_dir", None):
+            evidence = Path(args.alignment_evidence_dir)
+            if not evidence.is_dir():
+                raise FileNotFoundError(f"--alignment-evidence-dir does not exist: {evidence}")
+            args._alignment_evidence_dir = evidence.resolve()
         return
 
     if not getattr(args, "species_tree", None):

@@ -118,6 +118,7 @@ def calibrate_genomic_exons(output_dir, scenario, rate, units, replicates, seed)
         replicate = {"replicate": replicate_index, "fit_detail": fit.get("status"),
             "estimated_mu": mu, "fit_converged": fit.get("converged", False),
             "fit_valid_for_resampling": fit.get("valid_for_resampling", mu is not None),
+            "fit_record": json_safe(fit),
             "fit_error_type": type(fit_error).__name__ if fit_error else None,
             "fit_error_message": str(fit_error) if fit_error else None}
         replicate_rows.append(replicate)

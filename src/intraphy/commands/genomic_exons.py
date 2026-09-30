@@ -30,4 +30,6 @@ def dispatch_analyze(args):
         exon_identity=args.exon_identity, anchor_bases=args.anchor_bases,
         anchor_identity=args.anchor_identity, threads=args.threads,
         species_tree=getattr(args, "species_tree", None),
+        alignment_evidence_dir=getattr(args, "_alignment_evidence_dir",
+                                       getattr(args, "alignment_evidence_dir", None)),
     )

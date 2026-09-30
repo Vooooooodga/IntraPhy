@@ -91,6 +91,8 @@ def add_exon_commands(sub):
     analyze = sub.add_parser("analyze", help="Infer exon-structure histories from genomic exon spans, or select another supported model.")
     add_file_inputs(analyze, required=False)
     analyze.add_argument("--input-dir", help="Prepared genomic case directory containing species_tree.tsv.")
+    analyze.add_argument("--alignment-evidence-dir",
+                         help="Reuse recorded MAFFT/minimap2 evidence under a prepared-case analysis; conflicts with --exon-configurations.")
     analyze.add_argument("--genomic-evidence-dir", help="Reuse staged observations from prepare-genomic-evidence for the selected character type.")
     analyze.add_argument("--locus-model", action=_LocusModelAction,
                          help="Advanced DNA-only labelled-copy JSON model (intraphy.exon-locus-model/2).")

@@ -77,6 +77,35 @@ def fit_family_rate(units, branch_length_mode="supplied", max_origins=None):
                 "optimizer_candidates": candidates, "starting_log_likelihoods": sampled}
 
     xhat = best["x"]
+    x_probe = 2. * max(xhat, max(starts))
+    probe_ll = log_likelihood(x_probe)
+    if not np.isfinite(probe_ll):
+        probe_reason = "nonfinite_probe"
+    elif probe_ll > best["log_likelihood"] + tolerance:
+        probe_reason = "higher_probe"
+    elif probe_ll >= best["log_likelihood"] - tolerance:
+        probe_reason = "numerically_indistinguishable_probe"
+    else:
+        probe_reason = "lower_probe"
+    upper_tail_diagnostic = {
+        "method": "single_finite_probe_at_twice_max_selected_x_or_start",
+        "reason": probe_reason,
+        "x_probe": x_probe,
+        "log_likelihood": probe_ll if np.isfinite(probe_ll) else None,
+        "best_log_likelihood": best["log_likelihood"],
+        "comparison_tolerance": tolerance,
+        "scope": "finite_probe_only_not_an_asymptotic_or_global_optimum_test",
+    }
+    if probe_reason != "lower_probe":
+        return {"status": "upper_tail_unresolved", "converged": False, "mu": None,
+            "dimensionless_rate_x": xhat, "rate_exposure": exposure,
+            "log_likelihood": best["log_likelihood"], "selected_candidate": best,
+            "upper_tail_diagnostic": upper_tail_diagnostic,
+            "optimizer_candidates": candidates, "starting_log_likelihoods": sampled,
+            "rate_unit": "per_eligible_elementary_edit_opportunity_per_branch_length_unit",
+            "objective": "conditional_composite_log_likelihood_across_local_units_within_family",
+            "fit_scope": "best_converged_optimizer_result_among_tree_exposure_scaled_starts"}
+
     at_zero = xhat <= 1e-8
     curvature = _local_curvature(objective, np.array([xhat]), np.array([at_zero]))
     eigenvalues, rank, dimension, positive, negative, flat = curvature
@@ -97,6 +126,7 @@ def fit_family_rate(units, branch_length_mode="supplied", max_origins=None):
         "rate_unit": "per_eligible_elementary_edit_opportunity_per_branch_length_unit",
         "objective": "conditional_composite_log_likelihood_across_local_units_within_family",
         "fit_scope": "best_converged_optimizer_result_among_tree_exposure_scaled_starts",
+        "upper_tail_diagnostic": upper_tail_diagnostic,
         "zero_boundary_log_likelihood": zero_ll,
         "optimizer": "scipy.optimize.minimize(method='L-BFGS-B', bounds=[(0, None)])"}
 

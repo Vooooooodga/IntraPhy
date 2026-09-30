@@ -32,6 +32,21 @@ def _call(species, spans, instances, rows, *, materials=(), presence=(), partial
 
 
 class GenomicExonObservationTests(unittest.TestCase):
+    def _build_alignment_catalogues(self, rows, exon_spans):
+        instances = {key: _instance(key, species, span.start, span.end)
+                     for species, values in exon_spans.items()
+                     for key, span in values.items()}
+        spans = {key: span for values in exon_spans.values() for key, span in values.items()}
+        loci = tuple(SimpleNamespace(family="family", species=species,
+            exons=tuple(instances[key] for key in values),
+            paths={"tx1": tuple(values)} if values else {}, partial=False)
+            for species, values in exon_spans.items())
+        alignment = FamilyAlignment(loci, rows, {species: 0 for species in rows},
+            {species: tuple(i for i, base in enumerate(row) if base != "-")
+             for species, row in rows.items()}, spans, {}, ())
+        return build_catalogues(alignment, observation_unit="genomic_exon_spans",
+                                anchor_bases=2, anchor_identity=.8)[0]
+
     def test_complete_exon_spans_remain_separate_from_cds_subintervals(self):
         spans = {"coding": ExonSpan(0, 12), "noncoding": ExonSpan(20, 25)}
         instances = {
@@ -149,6 +164,68 @@ class GenomicExonObservationTests(unittest.TestCase):
         self.assertEqual(first_rows, second_rows)
         self.assertEqual(len(first_coordinates), 5)
         self.assertEqual(first_coordinates, second_coordinates)
+
+    def test_unsupported_gap_does_not_connect_units_and_remains_unknown(self):
+        rows = {"A": "A"*40, "B": "C"*10 + "-"*22 + "C"*8}
+        catalogues = self._build_alignment_catalogues(rows, {
+            "A": {"left": ExonSpan(5, 15), "right": ExonSpan(30, 35)},
+            "B": {},
+        })
+        self.assertEqual(len(catalogues), 2)
+        for catalogue in catalogues:
+            observation = next(o for o in catalogue.observations if o.species == "B")
+            self.assertEqual(observation.kind, "unknown")
+            self.assertIn("unsupported_alignment_gap", observation.reasons)
+            self.assertTrue(observation.unknown_intervals)
+            self.assertEqual(catalogue.material, ())
+            self.assertNotIn("all_candidate_spans_qualified_absent", observation.reasons)
+        self.assertEqual(next(o for o in catalogues[0].observations if o.species == "B").unknown_intervals,
+                         (ExonSpan(5, 10),))
+        self.assertEqual(next(o for o in catalogues[1].observations if o.species == "B").unknown_intervals,
+                         (ExonSpan(0, 2),))
+
+    def test_unsupported_gap_marks_observed_tip_partial_and_retains_exon(self):
+        rows = {"A": "A"*40, "B": "A"*8 + "--" + "C"*30,
+                "C": "A"*8 + "--" + "C"*30}
+        catalogues = self._build_alignment_catalogues(rows, {
+            "A": {"a": ExonSpan(5, 15)},
+            "B": {"b": ExonSpan(5, 15)},
+            "C": {"c": ExonSpan(5, 15)},
+        })
+        self.assertEqual(len(catalogues), 1)
+        observation = next(o for o in catalogues[0].observations if o.species == "B")
+        self.assertEqual(observation.kind, "partial")
+        self.assertIn(ExonSpan(3, 5), observation.unknown_intervals)
+        self.assertEqual(observation.configurations[0].exons, (ExonSpan(0, 10),))
+
+    def test_qualified_shared_deletion_keeps_spanning_exons_in_one_unit(self):
+        rows = {"A": "A"*40, "B": "A"*4 + "-"*32 + "A"*4}
+        catalogues = self._build_alignment_catalogues(rows, {
+            "A": {"left": ExonSpan(5, 15), "right": ExonSpan(25, 35)},
+            "B": {},
+        })
+        self.assertEqual(len(catalogues), 1)
+        catalogue = catalogues[0]
+        self.assertEqual(catalogue.status, "qualified")
+        self.assertEqual(len(catalogue.material), 1)
+        self.assertEqual((catalogue.material[0].start, catalogue.material[0].end), (0, 32))
+        presence = {o.species: o.material_presence for o in catalogue.observations}
+        self.assertEqual(presence, {"A": (1,), "B": (0,)})
+        absent = next(o for o in catalogue.observations if o.species == "B")
+        self.assertEqual(absent.kind, "observed")
+        self.assertEqual(absent.configurations[0].exons, ())
+
+    def test_overlapping_qualified_gaps_remain_unresolved(self):
+        rows = {"A": "A"*40, "B": "A"*8 + "-"*17 + "A"*15,
+                "C": "A"*15 + "-"*15 + "A"*10}
+        catalogues = self._build_alignment_catalogues(rows, {
+            "A": {"left": ExonSpan(5, 10), "right": ExonSpan(20, 35)},
+            "B": {}, "C": {},
+        })
+        self.assertEqual(len(catalogues), 1)
+        self.assertEqual(catalogues[0].status, "unresolved")
+        self.assertIn("overlapping_indel_tracts_unresolved", catalogues[0].reasons)
+        self.assertEqual(catalogues[0].material, ())
 
 
 @unittest.skipUnless(shutil.which("mafft") and shutil.which("minimap2"),

@@ -37,7 +37,10 @@ def reserve_output(args):
     target = path.resolve()
     if target in {Path('/'), Path.home(), Path.cwd()}:
         raise ValueError("Use a dedicated output directory, not the filesystem root, home or working directory")
-    for field in ("input_dir", "result_dir", "genomic_evidence_dir", "structural_site_matrix", "manifest", "species_tree", "locus_model", "evidence_json",
+    alignment_source = getattr(args, "alignment_evidence_dir", None)
+    if alignment_source and target.is_relative_to(Path(alignment_source).resolve()):
+        raise ValueError("Output directory must not be inside --alignment-evidence-dir.")
+    for field in ("input_dir", "result_dir", "genomic_evidence_dir", "alignment_evidence_dir", "structural_site_matrix", "manifest", "species_tree", "locus_model", "evidence_json",
                   "fasta", "gff", "orthologs", "config", "exon_configurations", "exon_rates", "repertoire_model", "profile_dir", "codon_matrix"):
         value = getattr(args, field, None)
         paths = value if isinstance(value, (list, tuple)) else [value]

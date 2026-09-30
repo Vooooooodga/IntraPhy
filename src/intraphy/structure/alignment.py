@@ -27,6 +27,7 @@ class FamilyAlignment:
     exons: dict[str, ExonSpan]
     anomalies: dict[str, tuple[str, ...]]
     matches: tuple[dict, ...]
+    reuse_provenance: dict | None = None
 
 
 def _write_fasta(path: Path, records: dict[str, str]):
@@ -35,7 +36,7 @@ def _write_fasta(path: Path, records: dict[str, str]):
 
 def align_family(loci: tuple[NativeLocus, ...], output_dir: str | Path, *,
                  timeout: int = 600, max_bases: int = 100000,
-                 threads: int = 1) -> FamilyAlignment:
+                 threads: int = 1, evidence_dir: str | Path | None = None) -> FamilyAlignment:
     if type(threads) is not int or threads < 1:
         raise ValueError("threads must be a positive integer")
     directory = Path(output_dir)
@@ -50,6 +51,13 @@ def align_family(loci: tuple[NativeLocus, ...], output_dir: str | Path, *,
         a, b = 0, len(locus.sequence)
         records[identifier] = locus.sequence[a:b]
         offsets[locus.species] = a
+    queries, query_exon = {}, {}
+    for locus in ordered:
+        for exon in locus.exons:
+            identifier = f"exon_{len(queries):06d}"
+            a, b = locus.oriented_interval(exon)
+            queries[identifier] = locus.sequence[a:b]
+            query_exon[identifier] = exon
     window_rows = [{"species": l.species, "source_contig": l.contig,
         "oriented_start0": 0, "oriented_end0": len(l.sequence),
         "available_bases": len(l.sequence), "selected_bases": len(l.sequence),
@@ -70,7 +78,15 @@ def align_family(loci: tuple[NativeLocus, ...], output_dir: str | Path, *,
         raise ValueError("locus_alignment_budget_exceeded: no genomic sequence was silently trimmed")
     raw = directory / "genomic_loci.fa"
     _write_fasta(raw, records)
-    if len(records) == 1:
+    query_file = directory / "exon_queries.fa"
+    _write_fasta(query_file, queries)
+    reuse_provenance = None
+    paf_text = None
+    if evidence_dir is not None:
+        from .alignment_evidence import load_alignment_evidence
+        aligned, paf_text, reuse_provenance = load_alignment_evidence(
+            evidence_dir, records, queries, ids)
+    elif len(records) == 1:
         aligned = records
     else:
         output = run_recorded(["mafft", "--auto", "--inputorder", "--thread", str(threads),
@@ -94,22 +110,14 @@ def align_family(loci: tuple[NativeLocus, ...], output_dir: str | Path, *,
             ia, ib = a-offsets[locus.species], b-offsets[locus.species]
             spans[exon.id] = ExonSpan(columns[locus.species][ia], columns[locus.species][ib-1]+1)
     # An independent nucleotide search retains inversions/competing local copies.
-    queries = {}
-    query_exon = {}
-    for locus in ordered:
-        for exon in locus.exons:
-            identifier = f"exon_{len(queries):06d}"
-            a, b = locus.oriented_interval(exon)
-            queries[identifier] = locus.sequence[a:b]
-            query_exon[identifier] = exon
-    query_file = directory / "exon_queries.fa"
-    _write_fasta(query_file, queries)
-    paf = run_recorded(["minimap2", "-c", "-x", "asm20", "--secondary=yes", "-N", "50",
-                        "-t", str(threads),
-                        str(raw.resolve()), str(query_file.resolve())], directory, "exon_minimap2", timeout)
+    if evidence_dir is None:
+        paf = run_recorded(["minimap2", "-c", "-x", "asm20", "--secondary=yes", "-N", "50",
+                            "-t", str(threads),
+                            str(raw.resolve()), str(query_file.resolve())], directory, "exon_minimap2", timeout)
+        paf_text = paf.read_text()
     matches = []
     hit_groups = defaultdict(list)
-    for line in paf.read_text().splitlines():
+    for line in paf_text.splitlines():
         fields = line.split("\t")
         if len(fields) < 12:
             continue
@@ -144,7 +152,8 @@ def align_family(loci: tuple[NativeLocus, ...], output_dir: str | Path, *,
                 anomalies[query_exon[q].id].add("reverse_correspondence_candidate")
     (directory / "genomic_alignment.fa").write_text("".join(f">{s}\n{row}\n" for s, row in rows.items()))
     return FamilyAlignment(ordered, rows, offsets, columns, spans,
-                           {k: tuple(sorted(v)) for k, v in anomalies.items()}, tuple(matches))
+                           {k: tuple(sorted(v)) for k, v in anomalies.items()}, tuple(matches),
+                           reuse_provenance)
 
 
 def paired_support(row_a: str, row_b: str, start: int, end: int):

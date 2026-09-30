@@ -40,6 +40,13 @@ its resulting geometry is recorded once. Transition opportunities are those
 generated from the declared sequence and annotation catalogue. Omitted
 opportunities have zero rate.
 
+For the genomic exon-span observation unit, alignment gaps connect exon spans
+into one local event unit and enter the declared material catalogue only when
+they pass the stated flanking-anchor support test. Unsupported gaps do not
+imply material absence: their intervals are retained as species-specific
+unknown regions, and affected observed tips are marked partial. Distinct
+overlapping qualified material tracts remain unresolved.
+
 Each identified variable material tract has states 0 (not introduced), 1
 (present), and 2 (deleted). Its origin is assigned once, either at the root or
 on one branch. State 2 cannot return to state 1 in that positional catalogue.
@@ -65,6 +72,12 @@ The likelihood is conditional on the supplied tree, its branch-length unit,
 the finite catalogue, and the stated independence structure. Annotation
 discovery is not corrected for ascertainment. The model does not provide a
 significance test for exon evolution.
+Before accepting a fitted rate, the fitter probes once at twice the larger of
+the selected dimensionless rate and its largest start; a non-finite or
+numerically indistinguishable/higher probe withholds the estimate as
+`upper_tail_unresolved`. This finite probe is a safeguard, not an asymptotic or
+global-optimum test; accepted estimates retain the existing multi-start fit
+scope.
 
 `calibrate-exons` provides a small fixed-catalogue conditional check for
 endpoint-change probabilities. It simulates histories on two built-in

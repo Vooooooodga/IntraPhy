@@ -92,8 +92,30 @@ intraphy analyze --input-dir prepared_case \
 
 An optional `--species-tree` replaces the prepared tree only when it has the
 same tip labels. Its topology and branch lengths condition inference. Without
-catalogue reuse, MAFFT and minimap2 are required for family alignment and
-nucleotide correspondence.
+catalogue or alignment-evidence reuse, MAFFT and minimap2 are required for
+family alignment and nucleotide correspondence.
+
+To rebuild genomic-exon catalogues from completed alignment evidence without
+rerunning either aligner, use the published `alignment_evidence/` directory
+from a prior exon-structure result:
+
+```bash
+intraphy analyze --input-dir prepared_case \
+  --alignment-evidence-dir prior_exon_result/alignment_evidence \
+  --output-dir rebuilt_exon_result
+```
+
+This option requires prepared inputs and is mutually exclusive with
+`--exon-configurations`. Reuse compares the saved genomic-locus and exon-query
+FASTA records with the current prepared data, checks the species-keyed MSA and
+its ordinary identifier/length/residue constraints, and requires successful
+MAFFT and minimap2 command records with compatible algorithm options.
+Historical command paths are retained as provenance; relocated published
+evidence is accepted when its saved inputs match. Missing, failed, or
+mismatching evidence stops analysis without an alignment fallback. Current
+identity and anchor thresholds still control catalogue reconstruction;
+alignment thread and timeout settings do not rerun the saved tools. The result's
+`exon_evidence_policy.json` records the evidence source and original commands.
 
 ## Exon endpoint calibration
 
