@@ -21,6 +21,7 @@ from ..structure.validation import validate_collection
 from ..inputs.species_tree import read_species_tree_rows, select_species_tree_rows
 from ..topology import SpeciesTree
 from .configuration_model import RateModel, evaluate_model
+from .configuration_compact import evaluate_compact
 from .genomic_exon_rates import fit_family_rate, fixed_family_fit
 from .genomic_exon_output import assemble_rows, state_rows, write_outputs
 from .genomic_exon_branches import branch_change_rows
@@ -47,10 +48,14 @@ def _analyze_family(payload):
                   "log_likelihood": None,
                   "ctmc": None, "states": state_rows(unit["space"])}
         if rate_model is not None:
-            result = evaluate_model(unit["space"], unit["tree"], unit["tips"], rate_model,
-                max_origins=parameters["max_origins"], posterior=True,
-                counts=parameters["expected_edits"],
-                branch_length_mode=parameters["branch_length_mode"])
+            if parameters["expected_edits"]:
+                result = evaluate_model(unit["space"], unit["tree"], unit["tips"], rate_model,
+                    max_origins=parameters["max_origins"], posterior=True, counts=True,
+                    branch_length_mode=parameters["branch_length_mode"])
+            else:
+                result = evaluate_compact(unit["space"], unit["tree"], unit["tips"], rate_model,
+                    max_origins=parameters["max_origins"], counts=False,
+                    branch_length_mode=parameters["branch_length_mode"])
             record["log_likelihood"] = result["log_likelihood"]
             record["ctmc"] = json_safe(result)
             if not np.isfinite(result["log_likelihood"]):

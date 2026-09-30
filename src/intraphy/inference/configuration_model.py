@@ -9,6 +9,7 @@ from ..structure.space import StateSpace
 from ..structure.origins import origin_scenarios, permitted
 from ..structure.tree_context import canonical_tree
 from .configuration_ctmc import likelihood, transition_matrix, expected_count, probability_any_change
+from .configuration_sparse import likelihood_only, sparse_generator
 
 
 @dataclass(frozen=True)
@@ -51,13 +52,18 @@ def generator(space: StateSpace, model: RateModel, origins: dict[str, str], chil
 
 def evaluate_model(space: StateSpace, tree, tips, model: RateModel, *,
                    max_origins: int | None = None, posterior: bool = True,
-                   counts: bool = True, branch_length_mode: str = "supplied"):
+                   counts: bool = True, branch_length_mode: str = "supplied",
+                   backend: str = "dense"):
     if not space.complete:
         raise ValueError("state_space_incomplete")
     if not model.foreground <= set(tree.parent)-{tree.root}:
         raise ValueError("Foreground contains unknown/root nodes")
     if branch_length_mode not in {"supplied", "unit"}:
         raise ValueError("Unknown branch length mode")
+    if backend not in {"dense", "sparse"}:
+        raise ValueError("Unknown likelihood backend")
+    if backend == "sparse" and (posterior or counts):
+        raise ValueError("Sparse backend currently supports likelihood only; set posterior=False, counts=False")
     context = canonical_tree(tree, model.foreground)
     tree = context.tree
     if any(n != tree.root and len(tree.children.get(n, ())) == 1 for n in tree.parent):
@@ -75,6 +81,18 @@ def evaluate_model(space: StateSpace, tree, tips, model: RateModel, *,
         for e in tree.edges()} if posterior else {}
     origin_weights = []
     for origins, root, log_prior in origin_scenarios(space, tree, max_origins, tips=tips, root_weight=model.origin_root_weight):
+        if backend == "sparse":
+            generators = {}
+            for _, child in tree.edges():
+                allowed = tuple(sorted(material for material, origin in origins.items()
+                                        if origin == child))
+                signature = (allowed, child in model.foreground)
+                generators[child] = cache.get_or_compute(
+                    signature, lambda child=child: sparse_generator(space, model, origins, child))
+            conditional = likelihood_only(tree, tips, generators, lengths,
+                                          root.astype(float)/root.sum())
+            total = float(np.logaddexp(total, conditional + log_prior))
+            continue
         matrices, generators, marked = {}, {}, {}
         for _, child in tree.edges():
             signature = (tuple(k for k, v in origins.items() if v == child), lengths[child], child in model.foreground)

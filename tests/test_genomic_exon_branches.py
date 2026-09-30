@@ -2,16 +2,22 @@
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
+import numpy as np
+
+from intraphy.inference.configuration_compact import evaluate_compact
+from intraphy.inference.configuration_model import RateModel, evaluate_model
 from intraphy.inference.genomic_exon_branches import (
     branch_change_rows, classify_exon_change,
 )
-from intraphy.inference.genomic_exon_output import write_outputs
+from intraphy.inference.genomic_exon_output import state_rows, write_outputs
 from intraphy.inference.genomic_exon_run import infer_genomic_exons
 from intraphy.storage.tabular import write_tsv
 from intraphy.structure.edits import EDIT_KINDS
-from intraphy.structure.serialization import write_catalogues, write_json
+from intraphy.structure.serialization import json_safe, write_catalogues, write_json
+from intraphy.structure.space import enumerate_space
 from intraphy.structure.types import Catalogue, ExonConfiguration, ExonSpan, ObservationEvidence
 from intraphy.topology import SpeciesTree
 
@@ -58,6 +64,82 @@ class GenomicExonBranchTests(unittest.TestCase):
                   {"exons": [[4, 6]], "material": []}]
         rows = _rows(states, [[.25, .25], [.25, .25]])
         self.assertEqual(len(rows), 4)
+
+    def test_dense_modes_within_tolerance_are_retained_with_actual_probabilities(self):
+        states = [{"exons": [[0, 2]], "material": []},
+                  {"exons": [[4, 6]], "material": []}]
+        rows = _rows(states, [[.4999999999995, .5000000000005], [0., 0.]])
+        self.assertEqual(len(rows), 2)
+        self.assertEqual({row["parent_exons"] for row in rows}, {((0, 2),)})
+        self.assertEqual({row["child_exons"] for row in rows}, {((0, 2),), ((4, 6),)})
+        probabilities = sorted(row["joint_configuration_probability"] for row in rows)
+        self.assertEqual(probabilities, [.4999999999995, .5000000000005])
+        self.assertTrue(all(row["joint_mode_tolerance_absolute"] == 1e-12
+                            and row["joint_mode_tolerance_relative"] == 1e-12
+                            for row in rows))
+
+    def test_dense_modes_outside_tolerance_remain_distinct(self):
+        states = [{"exons": [[0, 2]], "material": []},
+                  {"exons": [[4, 6]], "material": []}]
+        rows = _rows(states, [[.499999999996, .500000000004], [0., 0.]])
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["child_exons"], ((4, 6),))
+
+    def test_compact_branch_rows_match_dense_ctmc_without_pairwise_allocation(self):
+        exon = ExonSpan(2, 5)
+        catalogue = Catalogue("f", "u", 10, (exon,), (),
+            boundary_candidates=(exon,), observation_unit="genomic_exon_spans")
+        space = enumerate_space(catalogue)
+        tree = _tree()
+        tips = {"Species A": np.array([0., 1.]),
+                "Species B": np.array([1., 0.])}
+        model = RateModel({kind: .2 for kind in EDIT_KINDS})
+        dense = evaluate_model(space, tree, tips, model, posterior=True, counts=False,
+                               branch_length_mode="unit")
+        compact = json_safe(evaluate_compact(space, tree, tips, model, counts=False,
+                                             branch_length_mode="unit"))
+        self.assertEqual(compact["posterior_kind"], "compact_observable_pairs")
+        self.assertTrue(all("endpoint_probabilities" not in branch
+                            for branch in compact["branches"]))
+        details = {("f", "u"): {"catalogue": {"alignment_offset": 0, "material": []}}}
+        dense_result = [{"family_id": "f", "units": [{"unit_id": "u",
+            "states": state_rows(space), "ctmc": dense}]}]
+        compact_result = [{"family_id": "f", "units": [{"unit_id": "u",
+            "states": state_rows(space), "ctmc": compact}]}]
+        dense_rows = branch_change_rows(dense_result, details, tree)
+        self.assertEqual(len(dense_rows), 6)
+        original_zeros = np.zeros
+        def reject_pairwise(shape, *args, **kwargs):
+            if isinstance(shape, tuple) and len(shape) == 2:
+                raise AssertionError("compact branch adapter allocated a pairwise array")
+            return original_zeros(shape, *args, **kwargs)
+        with patch("intraphy.inference.genomic_exon_branches.np.zeros",
+                   side_effect=reject_pairwise):
+            compact_rows = branch_change_rows(compact_result, details, tree)
+        self.assertEqual(len(compact_rows), 6)
+        p = (1. + np.exp(-.4)) / 2.
+        shared_edge = [row for row in compact_rows if row["child_node_id"] == "branch"]
+        terminal_edges = [row for row in compact_rows if row["child_node_id"] in {"A", "B"}]
+        self.assertEqual(len(shared_edge), 2)
+        self.assertEqual(len(terminal_edges), 4)
+        self.assertTrue(all(abs(row["joint_configuration_probability"] - p/2.) < 1e-9
+                            for row in shared_edge))
+        self.assertTrue(all(abs(row["joint_configuration_probability"] - .5) < 1e-9
+                            for row in terminal_edges))
+        def key(row):
+            return (row["parent_node_id"], row["child_node_id"],
+                    row["parent_exons"], row["child_exons"],
+                    row["parent_dna_presence"], row["child_dna_presence"])
+        self.assertEqual({key(row) for row in compact_rows}, {key(row) for row in dense_rows})
+        for row in compact_rows:
+            expected = next(value for value in dense_rows if key(value) == key(row))
+            self.assertAlmostEqual(row["joint_configuration_probability"],
+                                   expected["joint_configuration_probability"], places=9)
+            self.assertAlmostEqual(row["probability_exon_structure_change"],
+                                   expected["probability_exon_structure_change"], places=9)
+            self.assertAlmostEqual(row["probability_dna_presence_change"],
+                                   expected["probability_dna_presence_change"], places=9)
+            self.assertEqual(row["change_classification"], expected["change_classification"])
 
     def test_split_fusion_boundary_shift_and_dna_coupling_classifications(self):
         self.assertEqual(classify_exon_change(((0, 10),), ((0, 4), (6, 10))),
@@ -140,6 +222,24 @@ class GenomicExonBranchTests(unittest.TestCase):
             self.assertFalse((output / "branch_exon_events.tsv").exists())
             self.assertIn("branch_exon_changes.tsv",
                           json.loads((output / "run_result.json").read_text())["artifacts"])
+            history = json.loads((output / "exon_history.json").read_text())
+            ctmc = history["units"][0]["ctmc"]
+            self.assertEqual(ctmc["posterior_kind"], "compact_observable_pairs")
+            self.assertTrue(all("endpoint_probabilities" not in branch
+                                for branch in ctmc["branches"]))
+
+            counted = root / "counted_results"
+            infer_genomic_exons(root, counted, configurations=root / "catalogues.jsonl",
+                rates=root / "rates.json", parameter_mode="fixed", expected_edits=True)
+            counted_history = json.loads((counted / "exon_history.json").read_text())
+            counted_ctmc = counted_history["units"][0]["ctmc"]
+            self.assertNotEqual(counted_ctmc.get("posterior_kind"),
+                                "compact_observable_pairs")
+            self.assertTrue(any("endpoint_probabilities" in branch
+                                for branch in counted_ctmc["branches"]))
+            self.assertTrue(any("expected_edits" in branch
+                                for branch in counted_ctmc["branches"]))
+            self.assertTrue((counted / "branch_exon_events.tsv").exists())
 
 
 if __name__ == "__main__":

@@ -74,6 +74,8 @@ class GenomicExonFitTests(unittest.TestCase):
                           side_effect=AssertionError("fixed fit called")), \
                     patch("intraphy.inference.genomic_exon_run.evaluate_model",
                           side_effect=AssertionError("CTMC called")), \
+                    patch("intraphy.inference.genomic_exon_run.evaluate_compact",
+                          side_effect=AssertionError("compact CTMC called")), \
                     patch("intraphy.inference.genomic_exon_run.state_rows",
                           side_effect=AssertionError("state rows materialized")):
                 diagnostics = infer_genomic_exons(root, output,
@@ -103,6 +105,17 @@ class GenomicExonFitTests(unittest.TestCase):
             fit = fit_family_rate([_unit(1., "concordant")])
         self.assertEqual(fit["status"], "zero_boundary")
         self.assertEqual(fit["mu"], 0.)
+
+    def test_rate_fit_uses_sparse_likelihood_backend(self):
+        calls = []
+        def likelihood(*args, **kwargs):
+            calls.append(kwargs.copy())
+            return _analytic_log_likelihood(*args, **kwargs)
+        with patch("intraphy.inference.genomic_exon_rates.evaluate_model", likelihood):
+            fixed_family_fit([_unit(1., "concordant")],
+                             RateModel({kind: .1 for kind in EDIT_KINDS}))
+        self.assertTrue(calls)
+        self.assertTrue(all(call["backend"] == "sparse" for call in calls))
 
     def test_discordant_single_unit_has_no_finite_rate_identification(self):
         with patch("intraphy.inference.genomic_exon_rates.evaluate_model", _analytic_log_likelihood):

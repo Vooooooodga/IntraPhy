@@ -20,6 +20,12 @@ class KernelCache:
                     return 0
                 seen.add(id(item))
                 return item.nbytes
+            if all(hasattr(item, name) for name in ("data", "indices", "indptr")):
+                if id(item) in seen:
+                    return 0
+                seen.add(id(item))
+                return sum(visit(getattr(item, name))
+                           for name in ("data", "indices", "indptr"))
             if isinstance(item, dict):
                 return sum(visit(v) for v in item.values())
             if isinstance(item, (tuple, list)):

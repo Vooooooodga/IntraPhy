@@ -8,6 +8,8 @@ COORDINATE_SYSTEM = "local_alignment_interbase_0based_halfopen"
 INTERPRETATION_SCOPE = (
     "endpoint net differences; does not estimate event counts or molecular mechanisms"
 )
+JOINT_MODE_ATOL = 1e-12
+JOINT_MODE_RTOL = 1e-12
 
 
 def observable_configuration(state):
@@ -94,6 +96,13 @@ def _changed_material_intervals(parent_mask, child_mask, materials):
                  zip(parent_mask, child_mask, materials) if before != after)
 
 
+def _observable_pair(mode):
+    return ((tuple(tuple(int(value) for value in span) for span in mode["parent_exons"]),
+             tuple(int(value) for value in mode["parent_dna_presence"])),
+            (tuple(tuple(int(value) for value in span) for span in mode["child_exons"]),
+             tuple(int(value) for value in mode["child_dna_presence"])))
+
+
 def _descendant_map(tree):
     descendants = {}
     for node in tree.postorder():
@@ -102,6 +111,43 @@ def _descendant_map(tree):
                                     for label in descendants[child]) if children
                              else [tree.label[node]])
     return descendants
+
+
+def _row(family, result, parent_id, child_id, descendant_species, parent, child,
+         probability_exon_change, probability_dna_change, probability, materials,
+         offset, mode_tolerance=None, evaluated=None, group_count=None):
+    dna_changed = parent[1] != child[1]
+    changed_intervals = _changed_material_intervals(parent[1], child[1], materials)
+    row = {
+        "family_id": family, "unit_id": result["unit_id"],
+        "parent_node_id": parent_id, "child_node_id": child_id,
+        "descendant_species": descendant_species,
+        "probability_exon_structure_change": probability_exon_change,
+        "probability_dna_presence_change": probability_dna_change,
+        "joint_configuration_probability": probability,
+        "parent_exons": parent[0], "child_exons": child[0],
+        "parent_dna_presence": parent[1], "child_dna_presence": child[1],
+        "material_ids": [item["id"] for item in materials],
+        "changed_material_tracts": [
+            {"material_id": item["id"], "start": item["start"],
+             "end": item["end"], "parent_presence": before,
+             "child_presence": after}
+            for before, after, item in zip(parent[1], child[1], materials)
+            if before != after],
+        "change_classification": classify_exon_change(
+            parent[0], child[0], dna_changed=dna_changed,
+            changed_material_intervals=changed_intervals),
+        "dna_presence_scope": "declared_material_tracts_only",
+        "coordinate_system": COORDINATE_SYSTEM,
+        "alignment_offset": offset,
+        "interpretation_scope": INTERPRETATION_SCOPE,
+    }
+    if mode_tolerance is not None:
+        row.update(joint_mode_tolerance_absolute=mode_tolerance["absolute"],
+                   joint_mode_tolerance_relative=mode_tolerance["relative"],
+                   parent_group_rows_evaluated=evaluated,
+                   parent_group_count=group_count)
+    return row
 
 
 def branch_change_rows(family_results, unit_details, tree):
@@ -126,16 +172,30 @@ def branch_change_rows(family_results, unit_details, tree):
                 dict.fromkeys(configuration[0] for configuration in configurations))}
             exon_groups = np.asarray([exon_ids[configuration[0]]
                                       for configuration in configurations])
-            exon_change = exon_groups[:, None] != exon_groups[None, :]
             dna_ids = {value: index for index, value in enumerate(
                 dict.fromkeys(configuration[1] for configuration in configurations))}
             dna_groups = np.asarray([dna_ids[configuration[1]]
                                      for configuration in configurations])
-            dna_change = dna_groups[:, None] != dna_groups[None, :]
             for branch in ctmc["branches"]:
+                summary = branch.get("observable_endpoint_summary")
+                if summary is not None:
+                    tolerance = summary["mode_tolerance"]
+                    parent_id, child_id = branch["parent"], branch["child"]
+                    for mode in summary["joint_modes"]:
+                        parent, child = _observable_pair(mode)
+                        rows.append(_row(family, result, parent_id, child_id,
+                            descendant_species[child_id], parent, child,
+                            summary["probability_exon_structure_change"],
+                            summary["probability_dna_presence_change"],
+                            mode["joint_configuration_probability"], materials, offset,
+                            tolerance, summary["parent_group_rows_evaluated"],
+                            summary["parent_group_count"]))
+                    continue
                 endpoint = branch.get("endpoint_probabilities")
                 if endpoint is None:
                     continue
+                exon_change = exon_groups[:, None] != exon_groups[None, :]
+                dna_change = dna_groups[:, None] != dna_groups[None, :]
                 endpoint = np.asarray(endpoint, dtype=float)
                 grouped = np.zeros((len(configurations), len(configurations)), dtype=float)
                 for state_index, group in enumerate(state_groups):
@@ -144,38 +204,18 @@ def branch_change_rows(family_results, unit_details, tree):
                 if grouped.size == 0:
                     continue
                 max_probability = float(grouped.max())
-                tied_modes = np.argwhere(grouped == max_probability)
+                tie_tolerance = JOINT_MODE_ATOL + JOINT_MODE_RTOL * abs(max_probability)
+                tied_modes = np.argwhere(np.abs(grouped - max_probability) <= tie_tolerance)
                 probability_exon_change = float(grouped[exon_change].sum())
                 probability_dna_change = float(grouped[dna_change].sum())
                 parent_id, child_id = branch["parent"], branch["child"]
                 for parent_group, child_group in tied_modes:
                     parent, child = configurations[parent_group], configurations[child_group]
                     probability = float(grouped[parent_group, child_group])
-                    dna_changed = parent[1] != child[1]
-                    changed_intervals = _changed_material_intervals(
-                        parent[1], child[1], materials)
-                    rows.append({
-                        "family_id": family, "unit_id": result["unit_id"],
-                        "parent_node_id": parent_id, "child_node_id": child_id,
-                        "descendant_species": descendant_species[child_id],
-                        "probability_exon_structure_change": probability_exon_change,
-                        "probability_dna_presence_change": probability_dna_change,
-                        "joint_configuration_probability": probability,
-                        "parent_exons": parent[0], "child_exons": child[0],
-                        "parent_dna_presence": parent[1], "child_dna_presence": child[1],
-                        "material_ids": [item["id"] for item in materials],
-                        "changed_material_tracts": [
-                            {"material_id": item["id"], "start": item["start"],
-                             "end": item["end"], "parent_presence": before,
-                             "child_presence": after}
-                            for before, after, item in zip(parent[1], child[1], materials)
-                            if before != after],
-                        "change_classification": classify_exon_change(
-                            parent[0], child[0], dna_changed=dna_changed,
-                            changed_material_intervals=changed_intervals),
-                        "dna_presence_scope": "declared_material_tracts_only",
-                        "coordinate_system": COORDINATE_SYSTEM,
-                        "alignment_offset": offset,
-                        "interpretation_scope": INTERPRETATION_SCOPE,
-                    })
+                    rows.append(_row(family, result, parent_id, child_id,
+                        descendant_species[child_id], parent, child,
+                        probability_exon_change, probability_dna_change,
+                        probability, materials, offset,
+                        {"absolute": JOINT_MODE_ATOL, "relative": JOINT_MODE_RTOL},
+                        len(configurations), len(configurations)))
     return rows

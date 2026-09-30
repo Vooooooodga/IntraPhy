@@ -29,7 +29,8 @@ def fit_family_rate(units, branch_length_mode="supplied", max_origins=None):
         model = _model(float(x)/exposure)
         values = [float(evaluate_model(unit["space"], unit["tree"], unit["tips"], model,
             max_origins=max_origins, posterior=False, counts=False,
-            branch_length_mode=branch_length_mode)["log_likelihood"]) for unit in units]
+            branch_length_mode=branch_length_mode, backend="sparse")["log_likelihood"])
+            for unit in units]
         return float(sum(values)) if all(np.isfinite(values)) else -math.inf
 
     def objective(point):
@@ -134,7 +135,8 @@ def fit_family_rate(units, branch_length_mode="supplied", max_origins=None):
 def fixed_family_fit(units, rates, branch_length_mode="supplied", max_origins=None):
     values = [float(evaluate_model(unit["space"], unit["tree"], unit["tips"], rates,
         max_origins=max_origins, posterior=False, counts=False,
-        branch_length_mode=branch_length_mode)["log_likelihood"]) for unit in units]
+        branch_length_mode=branch_length_mode, backend="sparse")["log_likelihood"])
+        for unit in units]
     ll = float(sum(values)) if values and all(np.isfinite(values)) else -math.inf
     return {"status": "fixed_parameters", "converged": True,
         "log_likelihood": ll if np.isfinite(ll) else None,

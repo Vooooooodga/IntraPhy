@@ -109,12 +109,31 @@ Every run writes `branch_exon_changes.tsv` from the existing CTMC joint
 endpoint probabilities. It summarizes the probability of exon-span structure
 change and declared material-tract DNA-presence change on each branch, and
 lists the joint modal observable parent/child configurations. Hidden material
-states 0 (unintroduced) and 2 (deleted) are both reported as absent. Every
-exactly tied joint mode is retained; no probability cutoff is applied. The
+states 0 (unintroduced) and 2 (deleted) are both reported as absent. Joint
+modes within the recorded absolute and relative tolerances of the maximum are
+retained; no probability mass cutoff is applied. The
 reported configurations are endpoint net differences and do not estimate the
 number of transitions or a molecular mechanism. DNA-presence probabilities
 cover only material tracts declared in the local catalogue, not all DNA or
 coding sequence.
+
+Likelihood fitting uses the sparse edit generator and exponential-action
+pruning. By default, posterior inference also uses exponential actions and
+contracts states that share the same observable exon geometry and declared
+DNA-presence pattern. It retains state-order node marginals and reports
+observable joint endpoint modes without storing a full state-pair endpoint
+matrix. Mode rows use absolute and relative tie tolerances of `1e-12`; these
+values apply to both compact and dense branch summaries and are recorded in
+`branch_exon_changes.tsv`. Compact rows also record the number of parent
+groups examined by the modal search; dense rows record the full observable
+group count. Complete state catalogues are evaluated under the declared root,
+origin, and transition models.
+
+`--expected-edits` requests transition-count expectations and uses the dense
+posterior evaluator for that calculation. Its state-pair endpoint and
+transition matrices require memory proportional to the square of the state
+count. The default path reports the probability of at least one edit and the
+observable endpoint summaries without those dense matrices.
 
 `change_classification` describes endpoint geometry. `net_split` and
 `net_fusion` require matching outer span boundaries for a one-to-many or
