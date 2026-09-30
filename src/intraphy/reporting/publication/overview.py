@@ -30,7 +30,7 @@ def draw():
     b += [text(x+30,y+105,"Whole-locus genomic alignment",14,color=MUTED)]
     b += track(x+30,y+133,420,100,[(3,24),(29,50),(67,83),(88,98)],height=24)
     b += [line(x+150,y+157,x+150,y+267,GOLD,2),line(x+294,y+157,x+294,y+267,GOLD,2),
-          line(x+399,y+157,x+399,y+267,GOLD,2),text(x+30,y+294,"Shared genomic coordinates",14,color=MUTED)]
+          line(x+399,y+157,x+399,y+267,GOLD,2),text(x+30,y+294,"Shared alignment coordinates",14,color=MUTED)]
     b += track(x+30,y+319,420,100,[(3,24),(29,50),(67,83),(88,98)],color=PURPLE,height=16)
     b += [text(x+30,y+438,"Sequence · strand · local order",13,color=MUTED)]
     # C: One physical interval geometry per species; UTR and terminal spans remain.

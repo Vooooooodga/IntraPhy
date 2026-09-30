@@ -14,7 +14,7 @@ def draw():
     b += track(62, 355, 500, 100, [(4,24),(31,45),(69,80),(87,98)], color=PURPLE, height=18)
     b += [line(182, 241, 182, 355, GOLD, 2), line(302,241,302,355,GOLD,2),
           line(412,241,412,355,GOLD,2), line(507,241,507,355,GOLD,2),
-          text(61, 431, "Shared genomic coordinates", 13, color=MUTED),
+          text(61, 431, "Shared alignment coordinates", 13, color=MUTED),
           line(580, 280, 632, 280, arrow=True)]
     # B: interval matches are chained in local genomic order; no algorithmic
     # path-selection procedure is implied by this schematic.
