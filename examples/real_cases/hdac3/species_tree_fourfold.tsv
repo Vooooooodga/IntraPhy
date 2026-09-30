@@ -1,0 +1,8 @@
+node_id	parent_id	label	branch_length
+root		root	0
+Drosophila_ananassae	root	Drosophila_ananassae	0.552152
+melanogaster_subgroup	root	melanogaster_subgroup	0.366991
+Drosophila_yakuba	melanogaster_subgroup	Drosophila_yakuba	0.126322
+mel_sim	melanogaster_subgroup	mel_sim	0.051002
+Drosophila_melanogaster	mel_sim	Drosophila_melanogaster	0.055613
+Drosophila_simulans	mel_sim	Drosophila_simulans	0.042975
