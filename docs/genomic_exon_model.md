@@ -66,6 +66,13 @@ the finite catalogue, and the stated independence structure. Annotation
 discovery is not corrected for ascertainment. The model does not provide a
 significance test for exon evolution.
 
+`calibrate-exons` provides a small fixed-catalogue conditional check for
+endpoint-change probabilities. It simulates histories on two built-in
+independent catalogues and compares inference at the generating rate with
+inference after fitting the shared rate from tips, state spaces, and tree.
+Scores report scored, failed, and nonidentified replicate denominators for each
+inference arm. This calibration does not cover FASTA/GFF catalogue discovery.
+
 The finite geometry catalogue is derived from observed boundaries and declared
 material-tract cuts; the model does not enumerate every possible exon boundary
 in sequence space. There is no default state-count cap. `--max-states` and

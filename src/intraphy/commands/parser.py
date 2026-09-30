@@ -17,6 +17,16 @@ def _positive_int_or_unlimited(value):
     return parsed
 
 
+def _positive_int(value):
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a positive integer") from exc
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return parsed
+
+
 def build_parser():
     parser = argparse.ArgumentParser(
         prog="intraphy", description="Infer genomic exon-span structure histories on a supplied rooted species tree.",
@@ -151,6 +161,19 @@ def build_parser():
     cal.add_argument("--bootstrap-replicates", type=int, default=0)
     cal.add_argument("--stochastic-maps", type=int, default=0)
     cal.add_argument("--seed", type=int, default=101)
+
+    exon_cal = sub.add_parser(
+        "calibrate-exons",
+        description="Calibrate exon-structure-ctmc endpoint probabilities on fixed independent catalogues.",
+    )
+    exon_cal.add_argument("--scenario", choices=("geometry", "shared-deletion"), required=True)
+    exon_cal.add_argument("--rate", type=float, required=True,
+                          help="Nonnegative shared elementary-edit rate used to generate histories.")
+    exon_cal.add_argument("--units", type=_positive_int, required=True,
+                          help="Independent local units per replicate, sharing one family rate.")
+    exon_cal.add_argument("--replicates", type=_positive_int, required=True)
+    exon_cal.add_argument("--seed", type=int, default=101)
+    exon_cal.add_argument("--output-dir", required=True)
 
     viz = sub.add_parser("visualize")
     viz.add_argument("--layout", choices=["target-groups", "legacy-overview"], default="target-groups",

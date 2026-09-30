@@ -95,6 +95,20 @@ same tip labels. Its topology and branch lengths condition inference. Without
 catalogue reuse, MAFFT and minimap2 are required for family alignment and
 nucleotide correspondence.
 
+## Exon endpoint calibration
+
+```bash
+intraphy calibrate-exons --scenario geometry --rate 0.2 --units 2 \
+  --replicates 20 --seed 101 --output-dir calibration
+```
+
+The `shared-deletion` scenario uses a material tract spanning two exons. Each
+replicate contains independent local units sharing a generated rate. Outputs
+compare fixed-rate reference inference with inference after estimating the rate
+from tips, state spaces, and tree. Failed or nonidentified fits remain counted
+per arm. This calibration is conditional on its fixed catalogues; FASTA/GFF
+catalogue discovery is not calibrated.
+
 ## Separate DNA-presence histories
 
 ```bash

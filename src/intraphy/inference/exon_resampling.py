@@ -15,7 +15,12 @@ from .exon_rates import fit_scale, InferenceUnit
 from ..structure.tree_context import canonical_tree
 
 
-def simulate_unit(unit: InferenceUnit, model: RateModel, rng) -> InferenceUnit:
+def sample_unit_history(unit: InferenceUnit, model: RateModel, rng):
+    """Return simulated observations together with latent assignments and origins.
+
+    The draw order is shared with :func:`simulate_unit`; callers that only need
+    tip observations should keep using that stable API.
+    """
     context = canonical_tree(unit.tree, model.foreground)
     space, tree = unit.space, context.tree
     if any(n != tree.root and len(tree.children.get(n, ())) == 1 for n in tree.parent):
@@ -46,7 +51,13 @@ def simulate_unit(unit: InferenceUnit, model: RateModel, rng) -> InferenceUnit:
         # that was deleted; do not leak latent origin labels into the data.
         tips[species] = np.array([float(s.exons == simulated.exons and
             all((a == 1) == (b == 1) for a, b in zip(s.material, simulated.material))) for s in space.states])
-    return replace(unit, tree=tree, tips=tips)
+    return replace(unit, tree=tree, tips=tips), assigned, origins
+
+
+def simulate_unit(unit: InferenceUnit, model: RateModel, rng) -> InferenceUnit:
+    """Simulate tip observations while preserving the historical return API."""
+    simulated, _, _ = sample_unit_history(unit, model, rng)
+    return simulated
 
 
 def foreground_bootstrap(units, base: RateModel, foreground, replicates: int, seed: int):

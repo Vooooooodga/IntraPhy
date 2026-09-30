@@ -12,7 +12,8 @@ from .preflight import preflight
 GUARDED_COMMANDS = {"build-case", "run", "infer-phylogeny", "visualize", "import-orthofinder",
                     "extract-loci", "normalize-annotation", "explain", "analyze", "fit-exon-rates", "realign-exons"}
 GUARDED_COMMANDS.update({"infer-exon-repertoires", "fit-exon-repertoire-rates"})
-GUARDED_COMMANDS.update({"locus-statistics", "prepare-locus-evidence", "prepare-genomic-evidence"})
+GUARDED_COMMANDS.update({"locus-statistics", "prepare-locus-evidence", "prepare-genomic-evidence",
+                         "calibrate-exons"})
 OWNERS = {"execution.json", "run_result.json", "case_build_report.tsv", "case_provenance.tsv",
           "visualization_manifest.tsv", "target_manifest.tsv", "figure_manifest.json",
           "locus_history.json", "locus_fit.json", "locus_statistics.json", "locus_model.json",
@@ -20,6 +21,7 @@ OWNERS = {"execution.json", "run_result.json", "case_build_report.tsv", "case_pr
           "intron_families.tsv", "intron_positions.tsv", "intron_observations.tsv", "intron_alignment.tsv",
           "intron_fit.json", "intron_history.json"}
 OWNERS.update({"exon_structure_fit.json", "exon_history.json", "exon_configurations.jsonl"})
+OWNERS.add("calibration_metadata.json")
 
 
 def _write_json(path, data):

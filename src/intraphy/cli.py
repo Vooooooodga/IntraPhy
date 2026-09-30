@@ -133,6 +133,10 @@ def _dispatch(args):
         benchmark_events(args.input_dir, args.output_dir)
     elif args.command == "calibrate":
         calibrate_simulations(args.output_dir, args.scenario, args.replicates, args.bootstrap_replicates, args.stochastic_maps, args.seed)
+    elif args.command == "calibrate-exons":
+        from .inference.genomic_exon_calibration import calibrate_genomic_exons
+        calibrate_genomic_exons(args.output_dir, args.scenario, args.rate,
+                                args.units, args.replicates, args.seed)
     elif args.command == "visualize":
         from .run_result import result_model
         model_name = str(result_model(args.result_dir))
