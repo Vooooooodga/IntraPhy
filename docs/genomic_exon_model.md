@@ -25,6 +25,9 @@ Each catalogue has `observation_unit="genomic_exon_spans"`. The CLI requires
 this marker when `--exon-configurations` reuses a prepared catalogue. A
 transcript-configuration catalogue has a different observation unit and cannot
 be relabelled for this model.
+`--threads` defaults to 1 and sets per-family MAFFT and minimap2 thread counts
+during genomic alignment preparation, then controls parallel family fits.
+MAFFT receives `--thread N --threadit 0`; `threadtb` remains at its default.
 
 ## State and transition process
 

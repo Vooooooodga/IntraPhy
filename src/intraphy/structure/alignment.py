@@ -34,7 +34,10 @@ def _write_fasta(path: Path, records: dict[str, str]):
 
 
 def align_family(loci: tuple[NativeLocus, ...], output_dir: str | Path, *,
-                 timeout: int = 600, max_bases: int = 100000) -> FamilyAlignment:
+                 timeout: int = 600, max_bases: int = 100000,
+                 threads: int = 1) -> FamilyAlignment:
+    if type(threads) is not int or threads < 1:
+        raise ValueError("threads must be a positive integer")
     directory = Path(output_dir)
     directory.mkdir(parents=True, exist_ok=True)
     ordered = tuple(sorted(loci, key=lambda l: l.species))
@@ -70,7 +73,9 @@ def align_family(loci: tuple[NativeLocus, ...], output_dir: str | Path, *,
     if len(records) == 1:
         aligned = records
     else:
-        output = run_recorded(["mafft", "--auto", "--inputorder", "--thread", "1", str(raw.resolve())], directory, "genomic_mafft", timeout)
+        output = run_recorded(["mafft", "--auto", "--inputorder", "--thread", str(threads),
+                               "--threadit", "0", str(raw.resolve())],
+                              directory, "genomic_mafft", timeout)
         aligned = parse_fasta(output)
     if set(aligned) != set(records) or len({len(s) for s in aligned.values()}) != 1:
         raise ValueError("MAFFT output changed record identifiers or alignment lengths")
@@ -99,7 +104,8 @@ def align_family(loci: tuple[NativeLocus, ...], output_dir: str | Path, *,
             query_exon[identifier] = exon
     query_file = directory / "exon_queries.fa"
     _write_fasta(query_file, queries)
-    paf = run_recorded(["minimap2", "-c", "-x", "asm20", "--secondary=yes", "-N", "50", "-t", "1",
+    paf = run_recorded(["minimap2", "-c", "-x", "asm20", "--secondary=yes", "-N", "50",
+                        "-t", str(threads),
                         str(raw.resolve()), str(query_file.resolve())], directory, "exon_minimap2", timeout)
     matches = []
     hit_groups = defaultdict(list)

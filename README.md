@@ -44,8 +44,10 @@ material-origin opportunity has weight one.
 There is no default state-count cap; `--max-states` and
 `--max-origin-scenarios` are explicit limits. Use `check` and `build-case` for
 staged input inspection or reuse.
-`--threads` parallelizes independent family fits. Whole-locus alignment and
-catalogue preparation are currently serial, with MAFFT using one thread.
+`--threads` defaults to 1 and sets the per-family MAFFT and minimap2 thread
+counts during genomic catalogue preparation, as well as the number of
+independent family fits. MAFFT uses `--thread N --threadit 0`; `threadtb` is
+left at the MAFFT default.
 See [genomic input requirements](docs/inputs.md) and the
 [command guide](docs/cli.md) for options and output interpretation.
 

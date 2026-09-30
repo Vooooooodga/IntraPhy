@@ -18,7 +18,9 @@ def _table(path, rows, fields):
 def prepare_configurations(input_dir: str | Path, output_dir: str | Path, *,
                            timeout=600, max_locus_bases=100000,
                            minimum_identity=.7, anchor_bases=12, anchor_identity=.8,
-                           observation_unit="transcript_configuration"):
+                           observation_unit="transcript_configuration", threads=1):
+    if type(threads) is not int or threads < 1:
+        raise ValueError("threads must be a positive integer")
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
     grouped = defaultdict(list)
@@ -34,7 +36,8 @@ def prepare_configurations(input_dir: str | Path, output_dir: str | Path, *,
                 coding.append({"family_id": family, "species": locus.species, "transcript": tx,
                                **native_cds(locus, tx)})
         try:
-            alignment = align_family(tuple(loci), directory, timeout=timeout, max_bases=max_locus_bases)
+            alignment = align_family(tuple(loci), directory, timeout=timeout,
+                                     max_bases=max_locus_bases, threads=threads)
             alignment, protein = check_coding_projection(alignment, input_dir)
             coding_projection_records += len(protein)
             cs, matches, predictions, coordinates = build_catalogues(alignment,
@@ -75,7 +78,8 @@ def prepare_configurations(input_dir: str | Path, output_dir: str | Path, *,
         "minimum_nucleotide_identity": minimum_identity,
         "gap_anchor_bases": anchor_bases, "gap_anchor_identity": anchor_identity,
         "protein_projection_agreement": .95, "thresholds_biologically_calibrated": False,
-        "genomic_alignment": "MAFFT --auto; single deterministic thread",
+        "genomic_alignment": "MAFFT --auto --thread N --threadit 0; threadtb left at MAFFT default",
+        "nucleotide_search": "minimap2 -t N",
         "search_window": "entire_supplied_or_extracted_locus; no annotation-based cropping",
         "annotation_alternatives": ("not_used_for_genomic_exon_spans" if observation_unit == "genomic_exon_spans"
                                      else "atomic_source_configuration; paired_flanks; exact_4base_changed_cut_context"),

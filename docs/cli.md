@@ -79,8 +79,10 @@ exon catalogue, supply `--exon-configurations` with `--input-dir`; every record
 must declare `observation_unit="genomic_exon_spans"`. Legacy transcript-path
 catalogues are rejected for this route. A fixed rate file requires
 `--exon-rates FILE --parameter-mode fixed`.
-`--threads` parallelizes independent family fits; whole-locus alignment and
-catalogue preparation currently run serially with MAFFT using one thread.
+`--threads` defaults to 1. During genomic catalogue preparation it sets the
+per-family MAFFT and minimap2 thread counts; MAFFT receives `--thread N
+--threadit 0`, with `threadtb` left at its default. The same value controls
+parallel independent family fits.
 
 ```bash
 intraphy analyze --input-dir prepared_case \

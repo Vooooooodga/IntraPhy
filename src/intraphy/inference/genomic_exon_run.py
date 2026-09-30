@@ -105,7 +105,8 @@ def infer_genomic_exons(input_dir, output_dir, *, configurations=None, rates=Non
         catalogues, preparation_reports = prepare_configurations(root, out,
             timeout=alignment_timeout, max_locus_bases=max_locus_bases,
             minimum_identity=exon_identity, anchor_bases=anchor_bases,
-            anchor_identity=anchor_identity, observation_unit="genomic_exon_spans")
+            anchor_identity=anchor_identity, observation_unit="genomic_exon_spans",
+            threads=threads)
     catalogues = validate_collection(tuple(catalogues), allow_empty=True)
     if any(c.observation_unit != "genomic_exon_spans" for c in catalogues):
         raise ValueError("Genomic exon inference requires genomic_exon_spans catalogues")
