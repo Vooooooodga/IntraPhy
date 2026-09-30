@@ -128,8 +128,16 @@ counts of molecular lesions.
 Every run writes `branch_exon_changes.tsv` from the existing CTMC joint
 endpoint probabilities. It summarizes the probability of exon-span structure
 change and declared material-tract DNA-presence change on each branch, and
-lists the joint modal observable parent/child configurations. Hidden material
-states 0 (unintroduced) and 2 (deleted) are both reported as absent. Joint
+marginalizes the complete endpoint distribution into physical exon-count pairs
+and reports the probabilities of count increase, decrease, and no net
+count change. The full finite count-pair domain is emitted without a probability
+cutoff. A count can remain unchanged while exon geometry changes, including
+boundary shifts or compensating changes. A count change does not identify a
+split, fusion, or event count. These are
+unit-specific endpoint summaries, not whole-gene extrapolations. The count
+marginals repeat on each modal-pair row and must not be summed across rows. The
+table also lists the joint modal observable parent/child configurations. Hidden material states
+0 (unintroduced) and 2 (deleted) are both reported as absent. Joint
 modes within the recorded absolute and relative tolerances of the maximum are
 retained; no probability mass cutoff is applied. The
 reported configurations are endpoint net differences and do not estimate the
@@ -141,9 +149,12 @@ Likelihood fitting uses the sparse edit generator and exponential-action
 pruning. By default, posterior inference also uses exponential actions and
 contracts states that share the same observable exon geometry and declared
 DNA-presence pattern. It retains state-order node marginals and reports
-observable joint endpoint modes without storing a full state-pair endpoint
-matrix. Mode rows use absolute and relative tie tolerances of `1e-12`; these
-values apply to both compact and dense branch summaries and are recorded in
+observable joint endpoint modes and exon-count pair marginals without storing
+a full state-pair endpoint matrix. Count-pair probabilities marginalize all
+states and material-origin scenarios under the same fitted CTMC; they describe
+parent/child endpoint counts rather than transition histories. Mode rows use
+absolute and relative tie tolerances of `1e-12`; these values apply to both
+compact and dense branch summaries and are recorded in
 `branch_exon_changes.tsv`. Compact rows also record the number of parent
 groups examined by the modal search; dense rows record the full observable
 group count. Complete state catalogues are evaluated under the declared root,

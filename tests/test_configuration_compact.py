@@ -2,8 +2,9 @@
 import unittest
 
 import numpy as np
+from scipy.sparse import csr_matrix
 
-from intraphy.inference.configuration_compact import evaluate_compact
+from intraphy.inference.configuration_compact import _action_columns, evaluate_compact
 from intraphy.inference.configuration_model import RateModel, evaluate_model
 from intraphy.structure.edits import EDIT_KINDS
 from intraphy.structure.space import enumerate_space
@@ -48,6 +49,19 @@ def _dense_grouped(space, endpoint):
 
 
 class ConfigurationCompactTests(unittest.TestCase):
+    def test_action_columns_rejects_nonfinite_positive_mass_and_preserves_zero_columns(self):
+        q = csr_matrix((2, 2), dtype=float)
+        for invalid in (np.nan, np.inf):
+            with self.subTest(invalid=invalid):
+                values = np.asarray([[0., invalid], [-1., -np.inf]])
+                with self.assertRaisesRegex(ArithmeticError, "NaN or positive infinity"):
+                    _action_columns(q, 0.5, values)
+        values = np.asarray([[0., -np.inf], [-2., -np.inf]])
+        result = _action_columns(q, 0.5, values)
+        np.testing.assert_array_equal(result, values)
+        all_zero = _action_columns(q, 0., np.full((2, 2), -np.inf))
+        self.assertTrue(np.isneginf(all_zero).all())
+
     def _compare_dense(self, space, tree, tips, model, **compact_options):
         dense = evaluate_model(space, tree, tips, model, counts=False)
         compact = evaluate_compact(space, tree, tips, model, **compact_options)
@@ -68,6 +82,31 @@ class ConfigurationCompactTests(unittest.TestCase):
             same_dna = sum(grouped[i, j] for i, a in enumerate(groups)
                            for j, b in enumerate(groups) if a[1] == b[1])
             summary = branch["observable_endpoint_summary"]
+            exon_counts = np.asarray([len(state.exons) for state in space.states])
+            maximum_count = int(exon_counts.max(initial=0))
+            expected_count_pairs = np.zeros((maximum_count + 1, maximum_count + 1))
+            for parent_state, parent_count in enumerate(exon_counts):
+                for child_state, child_count in enumerate(exon_counts):
+                    expected_count_pairs[parent_count, child_count] += expected[
+                        "endpoint_probabilities"][parent_state, child_state]
+            reported_pairs = summary["exon_count_pair_probabilities"]
+            self.assertEqual(len(reported_pairs), (maximum_count + 1) ** 2)
+            observed_count_pairs = np.zeros_like(expected_count_pairs)
+            for pair in reported_pairs:
+                observed_count_pairs[pair["parent_count"], pair["child_count"]] = pair["probability"]
+            np.testing.assert_allclose(observed_count_pairs, expected_count_pairs, atol=2e-10)
+            self.assertAlmostEqual(float(observed_count_pairs.sum()), 1., places=9)
+            self.assertAlmostEqual(summary["probability_exon_count_increase"],
+                                   float(np.triu(expected_count_pairs, 1).sum()), places=9)
+            self.assertAlmostEqual(summary["probability_exon_count_decrease"],
+                                   float(np.tril(expected_count_pairs, -1).sum()), places=9)
+            self.assertAlmostEqual(summary["probability_exon_count_unchanged"],
+                                   float(np.trace(expected_count_pairs)), places=9)
+            for node, axis in ((edge[0], 0), (edge[1], 1)):
+                expected_node_counts = np.bincount(exon_counts,
+                    weights=dense["nodes"][node], minlength=maximum_count + 1)
+                np.testing.assert_allclose(observed_count_pairs.sum(axis=1-axis),
+                                           expected_node_counts, atol=2e-10)
             self.assertAlmostEqual(summary["probability_exon_structure_change"],
                                    1. - same_exons, places=9)
             self.assertAlmostEqual(summary["probability_dna_presence_change"],

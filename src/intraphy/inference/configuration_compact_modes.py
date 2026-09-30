@@ -16,7 +16,7 @@ def _probability(value, label):
 
 def branch_scalars(payload, tree, lengths, exon_groups, exon_count,
                    dna_groups, dna_count, block_size, masked_columns,
-                   action_columns):
+                   action_columns, state_exon_counts):
     """Compute branch change probabilities from grouped exponential actions."""
     ll = payload["log_likelihood"]
     output = {}
@@ -39,10 +39,34 @@ def branch_scalars(payload, tree, lengths, exon_groups, exon_count,
             loga + q.diagonal() * lengths[child] + logb) - ll)
         no_edit = float(np.exp(no_edit_log)) if np.isfinite(no_edit_log) else 0.
         no_edit = _probability(no_edit, "no edit")
+        maximum_count = int(np.max(state_exon_counts, initial=0))
+        count_joint = np.zeros((maximum_count + 1, maximum_count + 1), dtype=float)
+        for start in range(0, maximum_count + 1, block_size):
+            child_counts = range(start, min(start + block_size, maximum_count + 1))
+            acted = action_columns(q, lengths[child],
+                                   masked_columns(logb, state_exon_counts, child_counts))
+            for parent_count in range(maximum_count + 1):
+                parent_values = np.full_like(loga, -np.inf)
+                parent_mask = state_exon_counts == parent_count
+                parent_values[parent_mask] = loga[parent_mask]
+                log_mass = logsumexp(parent_values[:, None] + acted, axis=0) - ll
+                if np.isnan(log_mass).any() or np.isposinf(log_mass).any():
+                    raise ArithmeticError("Invalid compact exon-count endpoint mass")
+                masses = np.zeros(len(tuple(child_counts)), dtype=float)
+                finite = np.isfinite(log_mass)
+                masses[finite] = np.exp(log_mass[finite])
+                count_joint[parent_count, start:start + len(masses)] += masses
+        count_up = float(np.triu(count_joint, k=1).sum())
+        count_down = float(np.tril(count_joint, k=-1).sum())
+        count_same = float(np.trace(count_joint))
         output[(parent, child)] = {
             "probability_exon_structure_change": _probability(1. - same[0], "exon change"),
             "probability_dna_presence_change": _probability(1. - same[1], "DNA change"),
             "probability_at_least_one_edit": _probability(1. - no_edit, "any edit"),
+            "exon_count_pair_probabilities": count_joint,
+            "probability_exon_count_increase": _probability(count_up, "exon-count increase"),
+            "probability_exon_count_decrease": _probability(count_down, "exon-count decrease"),
+            "probability_exon_count_unchanged": _probability(count_same, "unchanged exon count"),
         }
     return output
 

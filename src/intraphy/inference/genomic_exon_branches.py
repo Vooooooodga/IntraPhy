@@ -115,7 +115,7 @@ def _descendant_map(tree):
 
 def _row(family, result, parent_id, child_id, descendant_species, parent, child,
          probability_exon_change, probability_dna_change, probability, materials,
-         offset, mode_tolerance=None, evaluated=None, group_count=None):
+         offset, count_summary, mode_tolerance=None, evaluated=None, group_count=None):
     dna_changed = parent[1] != child[1]
     changed_intervals = _changed_material_intervals(parent[1], child[1], materials)
     row = {
@@ -124,6 +124,7 @@ def _row(family, result, parent_id, child_id, descendant_species, parent, child,
         "descendant_species": descendant_species,
         "probability_exon_structure_change": probability_exon_change,
         "probability_dna_presence_change": probability_dna_change,
+        **count_summary,
         "joint_configuration_probability": probability,
         "parent_exons": parent[0], "child_exons": child[0],
         "parent_dna_presence": parent[1], "child_dna_presence": child[1],
@@ -188,6 +189,11 @@ def branch_change_rows(family_results, unit_details, tree):
                             summary["probability_exon_structure_change"],
                             summary["probability_dna_presence_change"],
                             mode["joint_configuration_probability"], materials, offset,
+                            {key: summary[key] for key in (
+                                "exon_count_pair_probabilities",
+                                "probability_exon_count_increase",
+                                "probability_exon_count_decrease",
+                                "probability_exon_count_unchanged")},
                             tolerance, summary["parent_group_rows_evaluated"],
                             summary["parent_group_count"]))
                     continue
@@ -197,6 +203,8 @@ def branch_change_rows(family_results, unit_details, tree):
                 exon_change = exon_groups[:, None] != exon_groups[None, :]
                 dna_change = dna_groups[:, None] != dna_groups[None, :]
                 endpoint = np.asarray(endpoint, dtype=float)
+                if not np.isfinite(endpoint).all() or (endpoint < 0).any():
+                    raise ArithmeticError("Invalid dense exon-count endpoint probabilities")
                 grouped = np.zeros((len(configurations), len(configurations)), dtype=float)
                 for state_index, group in enumerate(state_groups):
                     grouped[group] += np.bincount(state_groups, weights=endpoint[state_index],
@@ -208,6 +216,22 @@ def branch_change_rows(family_results, unit_details, tree):
                 tied_modes = np.argwhere(np.abs(grouped - max_probability) <= tie_tolerance)
                 probability_exon_change = float(grouped[exon_change].sum())
                 probability_dna_change = float(grouped[dna_change].sum())
+                exon_counts = np.asarray([len(configuration[0])
+                                          for configuration in state_configs], dtype=np.int64)
+                maximum_count = int(exon_counts.max(initial=0))
+                count_joint = np.zeros((maximum_count + 1, maximum_count + 1), dtype=float)
+                for state_index, parent_count in enumerate(exon_counts):
+                    count_joint[parent_count] += np.bincount(
+                        exon_counts, weights=endpoint[state_index],
+                        minlength=maximum_count + 1)
+                count_pairs = [
+                    {"parent_count": parent_count, "child_count": child_count,
+                     "probability": float(count_joint[parent_count, child_count])}
+                    for parent_count in range(maximum_count + 1)
+                    for child_count in range(maximum_count + 1)]
+                count_increase = float(np.triu(count_joint, k=1).sum())
+                count_decrease = float(np.tril(count_joint, k=-1).sum())
+                count_unchanged = float(np.trace(count_joint))
                 parent_id, child_id = branch["parent"], branch["child"]
                 for parent_group, child_group in tied_modes:
                     parent, child = configurations[parent_group], configurations[child_group]
@@ -216,6 +240,10 @@ def branch_change_rows(family_results, unit_details, tree):
                         descendant_species[child_id], parent, child,
                         probability_exon_change, probability_dna_change,
                         probability, materials, offset,
+                        {"exon_count_pair_probabilities": count_pairs,
+                         "probability_exon_count_increase": count_increase,
+                         "probability_exon_count_decrease": count_decrease,
+                         "probability_exon_count_unchanged": count_unchanged},
                         {"absolute": JOINT_MODE_ATOL, "relative": JOINT_MODE_RTOL},
                         len(configurations), len(configurations)))
     return rows

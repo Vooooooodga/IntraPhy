@@ -27,13 +27,15 @@ metadata and use the HDAC3 transcript/CDS hierarchy specified above.
 
 The topology `(ananassae,(yakuba,(melanogaster,simulans)))` is the restriction
 of the [Drosophila 12 Genomes Consortium 2007 tree](https://doi.org/10.1038/nature06341)
-to these four species. Non-root branch lengths are one, for qualitative
-parsimony. No divergence-time or substitution-rate estimates are supplied.
-This sampling can leave the ancestral state and direction of a difference at
-the root unresolved; preserve equally parsimonious reconstructions.
+to these four species. The supplied non-root branch lengths are all one and
+provide an arbitrary common scale. No calibrated divergence-time or
+substitution lengths are supplied in this tree. Native CTMC rates and posterior
+histories are conditional on this scale, the supplied topology, the qualified
+evidence, and this four-species sample. Directional support is limited by that
+sampling and should be read from the conditional branch posterior.
 
 Published expectations and the distinction between structural correspondence
 and branch direction are in [truth_events.tsv](truth_events.tsv), for external
 scoring only. Keep that file outside the generated analysis input directory.
-No case build, inference or event-recovery test was run in this metadata task.
-See [the dataset record](../../../docs/real_positive_cases.md) for coordinates.
+See the [genomic exon-span model](../../../docs/genomic_exon_model.md) for
+model scope and coordinate interpretation.

@@ -37,6 +37,8 @@ def _group(values):
 
 def _action_columns(q, length, log_values):
     """Apply log_action while independently scaling each finite RHS column."""
+    if np.isnan(log_values).any() or np.isposinf(log_values).any():
+        raise ArithmeticError("Log likelihood input contains NaN or positive infinity")
     shifts = np.max(log_values, axis=0)
     valid = np.isfinite(shifts)
     result = np.full(log_values.shape, -np.inf, dtype=float)
@@ -153,6 +155,7 @@ def evaluate_compact(space, tree, tips, model, *, max_origins=None,
     dna_configurations, dna_groups = _group([value[1] for value in configurations])
     state_exon_groups = np.asarray([exon_groups[group] for group in state_groups])
     state_dna_groups = np.asarray([dna_groups[group] for group in state_groups])
+    state_exon_counts = np.asarray([len(state.exons) for state in space.states], dtype=np.int64)
     generator_cache = KernelCache(maximum_bytes=cache_bytes // 2)
     cache = KernelCache(maximum_bytes=cache_bytes - cache_bytes // 2)
     total = -math.inf
@@ -175,7 +178,7 @@ def evaluate_compact(space, tree, tips, model, *, max_origins=None,
         scalar_values = branch_scalars(payload, tree, lengths,
             state_exon_groups, len(exon_configurations),
             state_dna_groups, len(dna_configurations), block_size,
-            _masked_columns, _action_columns)
+            _masked_columns, _action_columns, state_exon_counts)
         for node, values in node_values.items():
             if node not in nodes:
                 nodes[node] = np.zeros_like(values)
@@ -213,11 +216,21 @@ def evaluate_compact(space, tree, tips, model, *, max_origins=None,
                         for origins, log_weight in origin_logweights]
     for edge in tree.edges():
         values = branches[edge]
+        count_pairs = [
+            {"parent_count": parent_count, "child_count": child_count,
+             "probability": float(values["exon_count_pair_probabilities"][parent_count,
+                                                                           child_count])}
+            for parent_count in range(values["exon_count_pair_probabilities"].shape[0])
+            for child_count in range(values["exon_count_pair_probabilities"].shape[1])]
         base["branches"].append({"parent": edge[0], "child": edge[1],
             "probability_at_least_one_edit": values["probability_at_least_one_edit"],
             "observable_endpoint_summary": {
                 "probability_exon_structure_change": values["probability_exon_structure_change"],
                 "probability_dna_presence_change": values["probability_dna_presence_change"],
+                "exon_count_pair_probabilities": count_pairs,
+                "probability_exon_count_increase": values["probability_exon_count_increase"],
+                "probability_exon_count_decrease": values["probability_exon_count_decrease"],
+                "probability_exon_count_unchanged": values["probability_exon_count_unchanged"],
                 **modal[edge]}})
     base["kernel_cache"] = {"hits": cache.hits, "misses": cache.misses,
                             "retained_bytes": cache.bytes,

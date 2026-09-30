@@ -140,6 +140,44 @@ class GenomicExonBranchTests(unittest.TestCase):
             self.assertAlmostEqual(row["probability_dna_presence_change"],
                                    expected["probability_dna_presence_change"], places=9)
             self.assertEqual(row["change_classification"], expected["change_classification"])
+            self.assertEqual([(pair["parent_count"], pair["child_count"])
+                              for pair in row["exon_count_pair_probabilities"]],
+                             [(pair["parent_count"], pair["child_count"])
+                              for pair in expected["exon_count_pair_probabilities"]])
+            np.testing.assert_allclose(
+                [pair["probability"] for pair in row["exon_count_pair_probabilities"]],
+                [pair["probability"] for pair in expected["exon_count_pair_probabilities"]],
+                atol=1e-9)
+            self.assertAlmostEqual(row["probability_exon_count_increase"],
+                                   expected["probability_exon_count_increase"], places=9)
+            self.assertAlmostEqual(row["probability_exon_count_decrease"],
+                                   expected["probability_exon_count_decrease"], places=9)
+            self.assertAlmostEqual(row["probability_exon_count_unchanged"],
+                                   expected["probability_exon_count_unchanged"], places=9)
+
+    def test_geometry_can_change_while_exon_count_is_unchanged(self):
+        states = [{"exons": [[0, 2]], "material": []},
+                  {"exons": [[4, 6]], "material": []}]
+        rows = _rows(states, [[.5, .5], [0., 0.]])
+        self.assertAlmostEqual(rows[0]["probability_exon_structure_change"], .5)
+        self.assertEqual(rows[0]["probability_exon_count_unchanged"], 1.)
+        self.assertEqual(rows[0]["probability_exon_count_increase"], 0.)
+        self.assertEqual(rows[0]["probability_exon_count_decrease"], 0.)
+        self.assertEqual(rows[0]["exon_count_pair_probabilities"], [
+            {"parent_count": 0, "child_count": 0, "probability": 0.},
+            {"parent_count": 0, "child_count": 1, "probability": 0.},
+            {"parent_count": 1, "child_count": 0, "probability": 0.},
+            {"parent_count": 1, "child_count": 1, "probability": 1.},
+        ])
+
+    def test_count_pair_direction_probabilities(self):
+        states = [{"exons": [], "material": []},
+                  {"exons": [[0, 2]], "material": []}]
+        rows = _rows(states, [[.1, .4], [.2, .3]])
+        for row in rows:
+            self.assertAlmostEqual(row["probability_exon_count_increase"], .4)
+            self.assertAlmostEqual(row["probability_exon_count_decrease"], .2)
+            self.assertAlmostEqual(row["probability_exon_count_unchanged"], .4)
 
     def test_split_fusion_boundary_shift_and_dna_coupling_classifications(self):
         self.assertEqual(classify_exon_change(((0, 10),), ((0, 4), (6, 10))),
@@ -193,6 +231,9 @@ class GenomicExonBranchTests(unittest.TestCase):
             table = Path(temp) / "branch_exon_changes.tsv"
             self.assertTrue(table.exists())
             self.assertIn("dna_presence_scope", table.read_text().splitlines()[0].split("\t"))
+            headers = table.read_text().splitlines()[0].split("\t")
+            self.assertIn("exon_count_pair_probabilities", headers)
+            self.assertIn("probability_exon_count_unchanged", headers)
 
     def test_small_fixed_catalogue_default_run_writes_branch_changes_without_event_counts(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -227,6 +268,10 @@ class GenomicExonBranchTests(unittest.TestCase):
             self.assertEqual(ctmc["posterior_kind"], "compact_observable_pairs")
             self.assertTrue(all("endpoint_probabilities" not in branch
                                 for branch in ctmc["branches"]))
+            compact_summary = ctmc["branches"][0]["observable_endpoint_summary"]
+            self.assertIn("exon_count_pair_probabilities", compact_summary)
+            self.assertAlmostEqual(sum(pair["probability"] for pair in
+                compact_summary["exon_count_pair_probabilities"]), 1.)
 
             counted = root / "counted_results"
             infer_genomic_exons(root, counted, configurations=root / "catalogues.jsonl",
