@@ -27,6 +27,20 @@ def _positive_int(value):
     return parsed
 
 
+def _add_short_alignment_dp_budget(command):
+    command.add_argument(
+        "--short-alignment-max-dp-cells",
+        type=_positive_int_or_unlimited,
+        default=MAX_INTERNAL_DP_CELLS,
+        metavar="N|unlimited",
+        help=(
+            f"Maximum DP cells for one complete short alignment (default: {MAX_INTERNAL_DP_CELLS}); "
+            "exceeding the budget fails the alignment without truncation. Use 'unlimited' "
+            "to remove this DP guard; actual system resources still limit the alignment."
+        ),
+    )
+
+
 def build_parser():
     parser = argparse.ArgumentParser(
         prog="intraphy", description="Infer genomic exon-span structure histories on a supplied rooted species tree.",
@@ -107,17 +121,7 @@ def build_parser():
         default=300,
         help="Maximum anchor-bounded nucleotide interval length for enumerating short-alignment candidates.",
     )
-    derive.add_argument(
-        "--short-alignment-max-dp-cells",
-        type=_positive_int_or_unlimited,
-        default=MAX_INTERNAL_DP_CELLS,
-        metavar="N|unlimited",
-        help=(
-            f"Maximum DP cells for one complete short alignment (default: {MAX_INTERNAL_DP_CELLS}); "
-            "exceeding the budget fails the alignment without truncation. Use 'unlimited' "
-            "to remove this DP guard; actual system resources still limit the alignment."
-        ),
-    )
+    _add_short_alignment_dp_budget(derive)
     derive.add_argument("--threads", type=int, default=1)
     derive.add_argument("--min-size-ratio", type=float, default=0.25)
 
@@ -225,6 +229,7 @@ def build_parser():
         default=300,
         help="Maximum anchor-bounded nucleotide interval length for enumerating short-alignment candidates.",
     )
+    _add_short_alignment_dp_budget(case)
     case.add_argument("--threads", type=int, default=1)
     case.add_argument("--min-size-ratio", type=float, default=0.25)
     case.add_argument("--flank", type=int, default=1000)

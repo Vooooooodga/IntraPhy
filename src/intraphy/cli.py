@@ -182,6 +182,7 @@ def _dispatch(args):
             context_aligner=args.context_aligner,
             coding_msa_mode=args.coding_msa_mode,
             short_context_max_length=args.short_context_max_length,
+            short_alignment_max_dp_cells=args.short_alignment_max_dp_cells,
             target_rows=args._input_selection.rows,
             allow_unannotated=args.allow_unannotated_loci,
         )

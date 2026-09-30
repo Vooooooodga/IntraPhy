@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stderr
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from intraphy.aligners.types import MAX_INTERNAL_DP_CELLS
 from intraphy.aligners.short import AlignmentBackendError, anchored_short_alignment
@@ -53,6 +53,16 @@ class ShortAlignmentBudgetCliTests(unittest.TestCase):
             .short_alignment_max_dp_cells
         )
 
+    def test_build_case_parse_default_positive_and_unlimited(self):
+        parser = build_parser()
+        base = ["build-case", "--manifest", "manifest.tsv", "--output-dir", "case"]
+        self.assertEqual(parser.parse_args(base).short_alignment_max_dp_cells,
+                         MAX_INTERNAL_DP_CELLS)
+        self.assertEqual(parser.parse_args(base + ["--short-alignment-max-dp-cells", "55000000"])
+                         .short_alignment_max_dp_cells, 55_000_000)
+        self.assertIsNone(parser.parse_args(base + ["--short-alignment-max-dp-cells", "unlimited"])
+                          .short_alignment_max_dp_cells)
+
     def test_dispatch_forwards_default_positive_and_unlimited(self):
         parser = build_parser()
         with patch("intraphy.cli.derive_tables") as derive:
@@ -67,6 +77,24 @@ class ShortAlignmentBudgetCliTests(unittest.TestCase):
                     derive.call_args.kwargs["short_alignment_max_dp_cells"], expected
                 )
 
+    def test_build_case_dispatch_forwards_default_positive_and_unlimited(self):
+        parser = build_parser()
+        selection = Mock()
+        selection.rows = []
+        with patch("intraphy.cli.build_case") as build:
+            for value, expected in (
+                ([], MAX_INTERNAL_DP_CELLS),
+                (["--short-alignment-max-dp-cells", "55000000"], 55_000_000),
+                (["--short-alignment-max-dp-cells", "unlimited"], None),
+            ):
+                args = parser.parse_args([
+                    "build-case", "--manifest", "manifest.tsv",
+                    "--output-dir", "case", *value,
+                ])
+                args._input_selection = selection
+                _dispatch(args)
+                self.assertEqual(build.call_args.kwargs["short_alignment_max_dp_cells"], expected)
+
     def test_invalid_values_fail_before_output_creation(self):
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp) / "out"
@@ -75,6 +103,20 @@ class ShortAlignmentBudgetCliTests(unittest.TestCase):
                     with self.assertRaises(SystemExit):
                         main([
                             "derive-tables", "--input-dir", str(Path(tmp) / "in"),
+                            "--output-dir", str(output),
+                            "--short-alignment-max-dp-cells", value,
+                        ])
+                    self.assertFalse(output.exists())
+
+    def test_build_case_invalid_values_fail_before_output_creation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "case"
+            for value in ("0", "-1", "1.5", "not-an-integer"):
+                with self.subTest(value=value), redirect_stderr(io.StringIO()):
+                    with self.assertRaises(SystemExit):
+                        main([
+                            "build-case", "--manifest", str(Path(tmp) / "manifest.tsv"),
+                            "--species-tree", str(Path(tmp) / "tree.tsv"),
                             "--output-dir", str(output),
                             "--short-alignment-max-dp-cells", value,
                         ])
