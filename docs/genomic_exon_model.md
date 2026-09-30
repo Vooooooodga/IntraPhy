@@ -21,6 +21,15 @@ or insufficient sequence support is unknown. Annotation records are evidence
 and can contain errors. The method does not infer RNA abundance, isoform use,
 splicing, or an RNA phenotype.
 
+For NCBI GFF3 annotations, `start_range` and `end_range` locate uncertainty at
+their respective genomic-coordinate boundaries, regardless of strand. These
+ranges are mapped to local alignment windows and clipped to the current unit;
+known sequence inside an exon remains observed. A propagated `partial=true`
+flag is localized using explicit sibling or transcript ranges when available.
+Generic partial flags without retained boundary locations remain conservatively
+unknown over the affected unit, including older prepared inputs that lack the
+original attributes.
+
 Each catalogue has `observation_unit="genomic_exon_spans"`. The CLI requires
 this marker when `--exon-configurations` reuses a prepared catalogue. A
 transcript-configuration catalogue has a different observation unit and cannot
@@ -56,6 +65,17 @@ they pass the stated flanking-anchor support test. Unsupported gaps do not
 imply material absence: their intervals are retained as species-specific
 unknown regions, and affected observed tips are marked partial. Distinct
 overlapping qualified material tracts remain unresolved.
+
+In the default automatic genomic catalogue, a qualified sequence-gap tract is
+not declared as a DNA material history when every present-day locus places it
+strictly inside one annotated exon and it has no exon-boundary or overlap
+conflict. Such a tract creates no DNA states 0/1/2 or new catalogue cut; its
+MSA columns, source coordinates, and existing unknown windows remain intact.
+Cross-boundary tracts, tracts spanning a whole exon, and shared-deletion
+opportunities remain eligible. This conditional structural model therefore
+excludes ancestor-only boundary histories at unobserved internal-gap endpoints
+and does not model the history of those internal indels. Legacy and
+explicit-catalogue inputs retain their existing behavior.
 
 Each identified variable material tract has states 0 (not introduced), 1
 (present), and 2 (deleted). Its origin is assigned once, either at the root or

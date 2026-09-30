@@ -8,6 +8,7 @@ import re
 from .alignment import FamilyAlignment, gap_supported, paired_support
 from .types import Catalogue, ExonConfiguration, ExonSpan, Material, ObservationEvidence
 from .material import normalize_exons
+from .structural_material import condition_internal_sequence_material
 from .alternatives import structure_alternatives
 from .genomic_observations import genomic_span_observation
 
@@ -245,6 +246,11 @@ def build_catalogues(alignment: FamilyAlignment, *, minimum_identity: float = .7
             _record_physical_exons(family, unit, species, positive, instances, spans, start,
                 kind, local_reasons, fatal, correspondence, coordinates, relation)
         status = "unresolved" if fatal else "qualified"
-        catalogues.append(replace(proto, observations=tuple(observations), status=status,
-                                  reasons=tuple(sorted(set(reasons)|fatal))))
+        catalogue = replace(proto, observations=tuple(observations), status=status,
+                            reasons=tuple(sorted(set(reasons)|fatal)))
+        if observation_unit == "genomic_exon_spans":
+            catalogue = condition_internal_sequence_material(
+                catalogue, loci=alignment.loci, ids=ids, spans=spans,
+                instances=instances, alignment=alignment, component_start=start)
+        catalogues.append(catalogue)
     return tuple(catalogues), correspondence, candidates, coordinates

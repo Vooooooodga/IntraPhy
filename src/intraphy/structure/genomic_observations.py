@@ -14,8 +14,23 @@ def genomic_span_observation(*, species, proto, locus, ids, spans, instances, al
     local = tuple(sorted({spans[eid] for eid in positive}))
     material = tuple(1 if value == 1 else 0 for value in material_presence)
     reasons = set()
+    localized_partial_applied = False
     unknown = [ExonSpan(match.start(), match.end())
                for match in re.finditer("[^ACGT-]+", row[start:start + proto.length])]
+    for genomic_start, genomic_end in getattr(locus, "partial_intervals", ()):
+        if locus.strand == "-":
+            sequence_start = locus.search_end - genomic_end
+            sequence_end = locus.search_end - genomic_start
+        else:
+            sequence_start = genomic_start - (locus.search_start - 1)
+            sequence_end = genomic_end - (locus.search_start - 1)
+        columns = alignment.columns[species][sequence_start:sequence_end]
+        if columns:
+            left = max(start, min(columns))
+            right = min(start + proto.length, max(columns) + 1)
+            if left < right:
+                unknown.append(ExonSpan(left - start, right - start))
+                localized_partial_applied = True
     unknown.extend(ExonSpan(m.start, m.end) for m, value in
                    zip(proto.material, material_presence) if value is None)
 
@@ -58,7 +73,9 @@ def genomic_span_observation(*, species, proto, locus, ids, spans, instances, al
     if not positive:
         reasons.add("annotation_missing_or_no_physical_exon_spans")
         absent = [qualified_absence(spans[eid], instances[eid].species) for eid in ids]
-        if absent and all(absent) and not locus.partial and not unknown:
+        unlocalized_partial = (locus.partial and
+                               not getattr(locus, "partial_location_known", False))
+        if absent and all(absent) and not unlocalized_partial and not unknown:
             return ObservationEvidence(species, (ExonConfiguration((), material),), "observed",
                 ("all_candidate_spans_qualified_absent",), (), material_presence)
         reasons.add("genomic_absence_unqualified")
@@ -88,9 +105,11 @@ def genomic_span_observation(*, species, proto, locus, ids, spans, instances, al
             unknown.append(candidate)
             reasons.add("projected_span_structure_unqualified")
 
-    if locus.partial or not locus.paths:
+    if (locus.partial and not getattr(locus, "partial_location_known", False)) or not locus.paths:
         unknown.append(ExonSpan(0, proto.length))
         reasons.add("partial_or_missing_annotation_structure")
+    elif localized_partial_applied:
+        reasons.add("localized_partial_annotation_boundary")
 
     qualified_placement = False
     for other, target in alignment.rows.items():

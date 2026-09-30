@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from ..storage.fasta import parse_fasta
 from ..storage.tabular import read_tsv
+from ..partial_boundaries import generic_partial, parse_attributes, range_declared, range_value
 from .types import ExonInstance
 
 
@@ -23,6 +24,8 @@ class NativeLocus:
     partial: bool
     coding_by_transcript: dict[str, tuple[tuple[int, int, int | None], ...]] = field(default_factory=dict)
     translation_exceptions: tuple[str, ...] = ()
+    partial_intervals: tuple[tuple[int, int], ...] = ()
+    partial_location_known: bool = False
 
     def oriented_interval(self, exon: ExonInstance) -> tuple[int, int]:
         if self.strand == "+":
@@ -46,6 +49,61 @@ def _cds_intervals(row):
     return tuple(result)
 
 
+def _attrs(row):
+    return parse_attributes(row.get("original_attributes", row.get("attrs", "")))
+
+
+def _has_partial_metadata(rows):
+    return (any(generic_partial(_attrs(row)) for row in rows) or
+            any(row.get("partial_start") == "1" or row.get("partial_end") == "1"
+                for row in rows) or
+            any(range_declared(_attrs(row), boundary) for row in rows
+                for boundary in ("start", "end")))
+
+
+def _partial_intervals(transcript_rows, search_start, search_end):
+    """Return 0-based genomic uncertainty windows for selected transcript paths."""
+    intervals = set()
+    localized = False
+    unlocated_generic = False
+    selected_rows = [row for group in transcript_rows.values() for row in group]
+    for tx_rows in transcript_rows.values():
+        ordered = sorted(tx_rows, key=lambda row: (int(row["start"]), int(row["end"])))
+        has_range = any(range_value(_attrs(row), boundary)
+                        for row in ordered for boundary in ("start", "end"))
+        has_unlocated_range = any(range_declared(_attrs(row), boundary) and
+                                  not range_value(_attrs(row), boundary)
+                                  for row in ordered for boundary in ("start", "end"))
+        has_partial = _has_partial_metadata(ordered)
+        if has_partial and (not has_range or has_unlocated_range):
+            unlocated_generic = True
+        for index, row in enumerate(ordered):
+            attrs = _attrs(row)
+            start_range = range_value(attrs, "start")
+            end_range = range_value(attrs, "end")
+            for name, value in (("start", start_range), ("end", end_range)):
+                if not value:
+                    continue
+                localized = True
+                bounds = [part.strip() for part in value.split(",")]
+                feature_start, feature_end = int(row["start"]), int(row["end"])
+                if name == "start":
+                    left = (max((int(other["end"]) for other in ordered[:index]
+                                 if int(other["end"]) < feature_start), default=search_start - 1)
+                            if bounds[0] == "." else int(bounds[0]) - 1)
+                    right = feature_start - 1 if bounds[1] == "." else int(bounds[1]) - 1
+                else:
+                    left = feature_end if bounds[0] == "." else int(bounds[0])
+                    right = (min((int(other["start"]) - 1 for other in ordered[index + 1:]
+                                  if int(other["start"]) > feature_end), default=search_end)
+                             if bounds[1] == "." else int(bounds[1]))
+                left, right = max(search_start - 1, left), min(search_end, right)
+                if left < right:
+                    intervals.add((left, right))
+    has_partial = _has_partial_metadata(selected_rows)
+    return tuple(sorted(intervals)), localized, has_partial, unlocated_generic
+
+
 def load_native(input_dir: str | Path) -> tuple[NativeLocus, ...]:
     root = Path(input_dir)
     loci = read_tsv(root / "gene_loci.tsv")
@@ -63,6 +121,27 @@ def load_native(input_dir: str | Path) -> tuple[NativeLocus, ...]:
     for locus in loci:
         rows = by_locus.get((locus["species"], locus["gene_copy_id"]), [])
         raw_locus = metadata[(locus["species"], locus["gene_copy_id"])]
+        by_tx_rows = defaultdict(list)
+        for row in rows:
+            by_tx_rows[row["transcript_id"]].append(row)
+        raw_tx = {row.get("id", ""): row for row in raw_locus
+                  if row.get("id") and row.get("type", "").lower() in
+                  {"mrna", "transcript", "lnc_rna", "ncrna", "rrna", "trna"} and
+                  row.get("ownership") == "target_gene_descendant"}
+        for tx, tx_row in raw_tx.items():
+            if tx in by_tx_rows:
+                by_tx_rows[tx].append(tx_row)
+        for raw_exon in raw_locus:
+            if (raw_exon.get("type", "").lower() != "exon" or
+                    raw_exon.get("ownership") != "target_gene_descendant"):
+                continue
+            parents = set(raw_exon.get("parents", "").split(";"))
+            parents.update(raw_exon.get("parent", "").replace(",", ";").split(";"))
+            for tx in parents & by_tx_rows.keys():
+                if any(int(path_row["start"]) == int(raw_exon["start"]) and
+                       int(path_row["end"]) == int(raw_exon["end"])
+                       for path_row in by_tx_rows[tx]):
+                    by_tx_rows[tx].append(raw_exon)
         families = {r["family_id"] for r in (rows or raw_locus)}
         if len(families) != 1:
             raise ValueError("Prepared locus belongs to multiple families")
@@ -103,10 +182,15 @@ def load_native(input_dir: str | Path) -> tuple[NativeLocus, ...]:
         expected = int(locus["search_end"])-int(locus["search_start"])+1
         if len(sequence) != expected:
             raise ValueError("Prepared genomic sequence length does not match its coordinate record")
-        partial = any(r.get("partial_start") == "1" or r.get("partial_end") == "1" for r in rows)
+        partial_intervals, localized_partial, generic_partial_seen, unlocated_generic = _partial_intervals(
+            by_tx_rows, int(locus["search_start"]), int(locus["search_end"]))
+        partial = (generic_partial_seen or bool(partial_intervals) or
+                   any(r.get("partial_start") == "1" or r.get("partial_end") == "1" for r in rows))
+        partial_location_known = not partial or (localized_partial and not unlocated_generic)
         result.append(NativeLocus(next(iter(families)), locus["species"], locus["gene_copy_id"],
             locus["contig"], locus["strand"], int(locus["search_start"]), int(locus["search_end"]),
-            sequence, tuple(instances), ordered_paths, partial, coding, tuple(sorted(exceptions))))
+            sequence, tuple(instances), ordered_paths, partial, coding, tuple(sorted(exceptions)),
+            partial_intervals, partial_location_known))
     keys = [(r.family, r.species) for r in result]
     if len(keys) != len(set(keys)):
         raise ValueError("V19 exon configurations require one orthologous locus per family and species")

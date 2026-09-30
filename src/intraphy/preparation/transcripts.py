@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from intraphy.aligners.scoring import splice_motif_score
+from intraphy.partial_boundaries import generic_partial, parse_attributes, range_declared, range_value
 from intraphy.preparation.annotation_index import overlaps_gene
 from intraphy.storage.tabular import read_tsv
 from pathlib import Path
@@ -146,8 +147,8 @@ def _format_attrs(attrs):
     return ";".join(f"{key}={attrs[key]}" for key in sorted(attrs)) if attrs else "NA"
 
 
-def _partial_boundary(feature, boundary):
-    attrs = feature.get("attrs", {}) or {}
+def _partial_boundary(feature, boundary, *, localized_range=False):
+    attrs = parse_attributes(feature.get("attrs", {}) or {})
     keys = (
         ("partial_start", "start_partial", "partial5")
         if boundary == "start"
@@ -156,10 +157,13 @@ def _partial_boundary(feature, boundary):
     for key in keys:
         if key in attrs:
             return attrs[key]
-    range_value = attrs.get(f"{boundary}_range")
-    if range_value not in {None, "", "."}:
-        return range_value
-    if str(attrs.get("partial", "")).lower() in {"1", "true", "yes"}:
+    strand = feature.get("strand", "+")
+    genomic_boundary = ("start" if (boundary == "start") == (strand != "-") else "end")
+    if range_value(attrs, genomic_boundary):
+        return "1"
+    if range_declared(attrs, genomic_boundary):
+        return "1"
+    if generic_partial(attrs) and not localized_range:
         return "1"
     return "0"
 
@@ -202,12 +206,20 @@ def _position_role(path_features, index):
 
 def _path_role_record(transcript_id, rank, path_features, index, feature, transcript=None):
     position_role = _position_role(path_features, index)
-    partial_start = _partial_boundary(feature, "start")
-    partial_end = _partial_boundary(feature, "end")
+    path_has_range = any(
+        range_value(item.get("attrs", {}), boundary)
+        for item in (*path_features, *((transcript,) if transcript else ()))
+        for boundary in ("start", "end")
+    )
+    localized_range = path_has_range and generic_partial(feature.get("attrs", {}))
+    partial_start = _partial_boundary(feature, "start", localized_range=localized_range)
+    partial_end = _partial_boundary(feature, "end", localized_range=localized_range)
     if transcript is not None and position_role in {"first", "single"} and partial_start == "0":
-        partial_start = _partial_boundary(transcript, "start")
+        parent_localized = path_has_range and generic_partial(transcript.get("attrs", {}))
+        partial_start = _partial_boundary(transcript, "start", localized_range=parent_localized)
     if transcript is not None and position_role in {"last", "single"} and partial_end == "0":
-        partial_end = _partial_boundary(transcript, "end")
+        parent_localized = path_has_range and generic_partial(transcript.get("attrs", {}))
+        partial_end = _partial_boundary(transcript, "end", localized_range=parent_localized)
     # A complete alternative transcript may start/end within the gene envelope.
     # Preserve explicit partial flags; an unmarked end means unassessed completeness,
     # not biological truncation inferred from another transcript's coordinates.

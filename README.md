@@ -72,6 +72,11 @@ exon spans. Annotation discovery is not corrected for ascertainment. Equal
 rates are a constrained baseline for the declared edit graph; results do not
 provide a significance test for exon evolution.
 
+![Method overview of genomic correspondence, physical exon-span observations, default CTMC inference, and endpoint-based branch summaries.](docs/figures/publication/method_scheme.svg)
+
+See [method schematics](docs/method_schematics.md) for this figure's caption
+and the four companion figures.
+
 ## Other explicit models
 
 `--model dna-presence-ctmc` and `--model intron-position-ctmc` run separate
