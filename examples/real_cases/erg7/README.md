@@ -46,12 +46,14 @@ preparation.
 
 ## Native analysis
 
-The native fit qualified one unit with 277 complete states and converged.
-Scry and Soct supplied informative partial observations; Spom and Sjap were
-unknown across the full unit because sequence correspondence remained
-unresolved. The focal branch `pombe_cry_octo` → `cry_octo` has exon-count
-endpoint probabilities 0.2726608222 decrease, 0.3669871303 increase, and
-0.3603520475 unchanged (`branch_exon_changes.tsv`). The analysis did not
-recover a reliable ancestral branch fusion, and the published 3-nt remnant
-remains unconfirmed in these assembly-matched inputs. This summarizes this
-case's inputs and fit only; it is not an accuracy claim.
+The native fit qualified one unit with 277 complete states and converged
+(mu=0.3094; log likelihood -11.9209). Three tips were informative. *S. pombe*
+retained a supported 618 bp block at local coordinates [1855,2473) and global
+MSA columns [3126,3744); its remaining windows [0,1855) and [2473,4176) remain
+unknown, as does the full *S. japonicus* unit. On `pombe_cry_octo` → `cry_octo`,
+exon-count endpoint probabilities are 0.2664 for decrease, 0.3412 for increase,
+and 0.3924 for unchanged. The probability of any exon-geometry change is
+0.9080, a broader summary than fusion probability. The DNA-material catalogue
+is empty, so it provides no test of the proposed deletion. These results do
+not confirm the ancestral fusion, the reported 3-nt remnant, or orthology of
+all four records; they summarize this case's inputs and fit only.

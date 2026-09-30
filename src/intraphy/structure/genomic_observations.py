@@ -6,6 +6,53 @@ from .alignment import gap_supported, paired_support
 from .types import ExonConfiguration, ExonSpan, ObservationEvidence
 
 
+def _shared_exon_complement(species, *, ids, spans, instances, alignment, row,
+                            start, length, minimum_identity, anchor_bases):
+    """Return unsupported unit windows and whether any strict local span matched."""
+    source_loci = {locus.species: locus for locus in alignment.loci}
+    source_spans = {}
+    for eid in ids:
+        source = instances[eid].species
+        if source != species:
+            source_spans.setdefault(source, set()).add(spans[eid])
+    local = sorted({spans[eid] for eid in ids if instances[eid].species == species})
+    supported = []
+    for exon in local:
+        exon_length = exon.end - exon.start
+        if exon_length < anchor_bases:
+            continue
+        a, b = start + exon.start, start + exon.end
+        for source, candidates in source_spans.items():
+            if exon not in candidates:
+                continue
+            locus = source_loci.get(source)
+            if (locus is None or not hasattr(locus, "partial") or locus.partial
+                    or not hasattr(locus, "paths") or not locus.paths):
+                continue
+            source_ids = [eid for eid in ids if instances[eid].species == source
+                          and spans[eid] == exon]
+            if not any(eid in path for eid in source_ids for path in locus.paths.values()):
+                continue
+            annotated = sorted(candidates)
+            if any(left.end >= right.start for left, right in zip(annotated, annotated[1:])):
+                continue
+            paired, identity = paired_support(row, alignment.rows[source], a, b)
+            if paired == exon_length and identity >= minimum_identity:
+                supported.append(exon)
+                break
+    if not supported:
+        return (), False
+    unknown = []
+    cursor = 0
+    for exon in sorted(set(supported)):
+        if cursor < exon.start:
+            unknown.append(ExonSpan(cursor, exon.start))
+        cursor = max(cursor, exon.end)
+    if cursor < length:
+        unknown.append(ExonSpan(cursor, length))
+    return tuple(unknown), True
+
+
 def genomic_span_observation(*, species, proto, locus, ids, spans, instances, alignment,
                              material_presence, all_material_presence, start, minimum_identity, anchor_bases,
                              anchor_identity):
@@ -122,12 +169,19 @@ def genomic_span_observation(*, species, proto, locus, ids, spans, instances, al
         other_presence = all_material_presence.get(other, ())
         if other_presence and absent_material_covers_exons(other_presence):
             qualified_placement = True
+    local_correspondence_applied = False
     if len(alignment.loci) > 1 and not qualified_placement:
-        unknown.append(ExonSpan(0, proto.length))
         reasons.add("unresolved_sequence_correspondence")
+        local_windows, local_supported = _shared_exon_complement(species, ids=ids,
+            spans=spans, instances=instances, alignment=alignment, row=row, start=start,
+            length=proto.length, minimum_identity=minimum_identity, anchor_bases=anchor_bases)
+        unknown.extend(local_windows if local_supported else (ExonSpan(0, proto.length),))
+        if local_supported:
+            reasons.add("local_shared_exon_correspondence")
+            local_correspondence_applied = True
 
     if unknown:
         reasons.add("local_physical_exons_retained_outside_unknown_windows")
-    kind = "partial" if unknown else "observed"
+    kind = "partial" if unknown or local_correspondence_applied else "observed"
     return ObservationEvidence(species, (ExonConfiguration(local, material),), kind,
         tuple(sorted(reasons)), positive, material_presence, tuple(sorted(set(unknown))))

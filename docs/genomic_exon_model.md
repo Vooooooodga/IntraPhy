@@ -21,6 +21,18 @@ or insufficient sequence support is unknown. Annotation records are evidence
 and can contain errors. The method does not infer RNA abundance, isoform use,
 splicing, or an RNA phenotype.
 
+If whole-unit correspondence fails, an exact physical exon interval can retain
+local support when another complete, path-associated, nonconflicting annotated
+locus has the same interval in genomic-alignment coordinates, and every
+alignment column contains A/C/G/T in both sequences with sequence identity at
+or above the configured threshold. The span must also meet the anchor-length
+requirement.
+The supported exon interior constrains compatible states; its complement and
+any pre-existing unknown windows remain unknown, so boundary extensions and
+fusion histories through those regions are not resolved. This local nucleotide
+match does not establish gene-family orthology and does not require protein
+projection evidence.
+
 For NCBI GFF3 annotations, `start_range` and `end_range` locate uncertainty at
 their respective genomic-coordinate boundaries, regardless of strand. These
 ranges are mapped to local alignment windows and clipped to the current unit;
