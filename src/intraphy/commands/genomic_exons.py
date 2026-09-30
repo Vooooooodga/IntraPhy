@@ -32,4 +32,5 @@ def dispatch_analyze(args):
         species_tree=getattr(args, "species_tree", None),
         alignment_evidence_dir=getattr(args, "_alignment_evidence_dir",
                                        getattr(args, "alignment_evidence_dir", None)),
+        state_space_only=getattr(args, "state_space_only", False),
     )

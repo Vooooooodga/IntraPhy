@@ -99,6 +99,8 @@ def add_exon_commands(sub):
     analyze.add_argument("--species-tree", help="Rooted Newick or TSV tree for raw inputs or --locus-model; with --input-dir, replace its tree only with the same tip panel.")
     analyze.add_argument("--parameter-mode", choices=("fit", "fixed"), default="fit",
                          help="Fit the default exon-structure-ctmc rate, or evaluate an explicit --exon-rates file in fixed mode.")
+    analyze.add_argument("--state-space-only", action="store_true",
+                         help="Enumerate complete qualified exon state spaces and observation eligibility without fitting or CTMC evaluation.")
     analyze.add_argument("--output-dir", required=True)
     analyze.add_argument("--threads", type=int, default=1)
     analyze.add_argument("--flank", type=int, default=1000, action=_TrackedValueAction)

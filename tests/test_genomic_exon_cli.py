@@ -23,6 +23,29 @@ class GenomicExonCliTests(unittest.TestCase):
                                             "--output-dir", "result"]).root_frequency,
                          "stationary")
 
+    def test_state_space_only_is_limited_to_exon_structure_model(self):
+        parser = build_parser()
+        args = parser.parse_args(["analyze", "--input-dir", "prepared", "--state-space-only",
+                                  "--output-dir", "result"])
+        self.assertTrue(args.state_space_only)
+        args.model = "dna-presence-ctmc"
+        with self.assertRaisesRegex(ValueError, "requires --model exon-structure-ctmc"):
+            validate_analysis_options(args)
+
+    def test_state_space_only_rejects_state_limit(self):
+        args = build_parser().parse_args(["analyze", "--input-dir", "prepared",
+            "--state-space-only", "--max-states", "64", "--output-dir", "result"])
+        with self.assertRaisesRegex(ValueError, "omit --max-states"):
+            validate_analysis_options(args)
+
+    def test_state_space_only_manifest_is_not_a_renderable_completed_run(self):
+        with tempfile.TemporaryDirectory() as directory:
+            RunResult("exon-structure-ctmc", "genomic-exon-state-space-diagnostic",
+                      "species_tree.tsv", ("state_space_diagnostics.jsonl",),
+                      status="state_space_only").write(directory)
+            with self.assertRaisesRegex(ValueError, "incomplete run"):
+                result_model(directory)
+
     def test_raw_dispatch_skips_legacy_correspondence_derivation(self):
         selection = Mock()
         selection.rows = [{"family_id": "f"}]

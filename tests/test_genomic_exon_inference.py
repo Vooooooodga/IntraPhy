@@ -1,5 +1,8 @@
 """Regression contracts for the genomic-span fit and existing CTMC kernel."""
 from types import SimpleNamespace
+import json
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -7,9 +10,11 @@ import numpy as np
 
 from intraphy.inference.configuration_model import RateModel, evaluate_model, generator
 from intraphy.inference.genomic_exon_rates import fit_family_rate, fixed_family_fit
+from intraphy.inference.genomic_exon_run import infer_genomic_exons
 from intraphy.structure.edits import EDIT_KINDS
 from intraphy.structure.space import enumerate_space
 from intraphy.structure.types import Catalogue, ExonConfiguration, ExonSpan, Material, ObservationEvidence
+from intraphy.structure.serialization import write_catalogues
 from intraphy.topology import SpeciesTree
 
 
@@ -43,6 +48,56 @@ def _analytic_log_likelihood(space, tree, tips, model, **kwargs):
 
 
 class GenomicExonFitTests(unittest.TestCase):
+    def test_state_space_only_enumerates_complete_units_without_inference_or_state_rows(self):
+        span = ExonSpan(0, 2)
+        qualified = Catalogue("f", "u", 15,
+            (span, ExonSpan(3, 5), ExonSpan(6, 8), ExonSpan(9, 11),
+             ExonSpan(12, 14)), (),
+            observations=(ObservationEvidence("A", (ExonConfiguration(()),)),
+                          ObservationEvidence("B", (ExonConfiguration((span,)),)),),
+            observation_unit="genomic_exon_spans")
+        unqualified = Catalogue("g", "v", 2, (), (), status="unresolved",
+            reasons=("no_annotated_exons",), observation_unit="genomic_exon_spans")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "input"
+            root.mkdir()
+            (root / "species_tree.tsv").write_text(
+                "node_id\tparent_id\tlabel\tbranch_length\n"
+                "root\t\troot\t\nA\troot\tA\t0.1\nB\troot\tB\t0.2\n",
+                encoding="utf-8")
+            catalogue_path = Path(directory) / "catalogues.jsonl"
+            write_catalogues(catalogue_path, (qualified, unqualified))
+            output = Path(directory) / "output"
+            with patch("intraphy.inference.genomic_exon_run.fit_family_rate",
+                       side_effect=AssertionError("rate fit called")), \
+                    patch("intraphy.inference.genomic_exon_run.fixed_family_fit",
+                          side_effect=AssertionError("fixed fit called")), \
+                    patch("intraphy.inference.genomic_exon_run.evaluate_model",
+                          side_effect=AssertionError("CTMC called")), \
+                    patch("intraphy.inference.genomic_exon_run.state_rows",
+                          side_effect=AssertionError("state rows materialized")):
+                diagnostics = infer_genomic_exons(root, output,
+                    configurations=catalogue_path, state_space_only=True)
+            qualified_result = next(row for row in diagnostics if row["family_id"] == "f")
+            self.assertTrue(qualified_result["state_space_complete"])
+            self.assertGreater(qualified_result["state_count"], 64)
+            self.assertEqual(qualified_result["status"], "eligible_conditional_unit")
+            self.assertEqual(qualified_result["probability_status"], "not_computed")
+            unqualified_result = next(row for row in diagnostics if row["family_id"] == "g")
+            self.assertEqual(unqualified_result["status"], "unqualified_catalogue")
+            self.assertIsNone(unqualified_result["state_count"])
+            manifest = json.loads((output / "run_result.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["status"], "state_space_only")
+            self.assertEqual(set(manifest["artifacts"]), {
+                "exon_configurations.jsonl", "species_tree.tsv", "state_space_diagnostics.jsonl"})
+            self.assertFalse((output / "exon_structure_fit.json").exists())
+            self.assertFalse((output / "exon_history.json").exists())
+            progress = [json.loads(line) for line in
+                        (output / "state_space_diagnostics.jsonl").read_text(encoding="utf-8").splitlines()]
+            self.assertEqual([row["stage"] for row in progress], [
+                "enumeration_started", "enumeration_and_eligibility_complete",
+                "unit_started", "unit_assessment_complete"])
+
     def test_concordant_one_edge_optimizer_harness_selects_zero_boundary(self):
         with patch("intraphy.inference.genomic_exon_rates.evaluate_model", _analytic_log_likelihood):
             fit = fit_family_rate([_unit(1., "concordant")])

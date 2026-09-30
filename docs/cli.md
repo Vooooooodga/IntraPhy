@@ -84,6 +84,25 @@ per-family MAFFT and minimap2 thread counts; MAFFT receives `--thread N
 --threadit 0`, with `threadtb` left at its default. The same value controls
 parallel independent family fits.
 
+To enumerate every qualified genomic exon state space and assess observation
+eligibility without fitting a rate or evaluating the CTMC, add
+`--state-space-only`:
+
+```bash
+intraphy analyze --input-dir prepared_case \
+  --exon-configurations exon_configurations.jsonl \
+  --state-space-only --output-dir state_space_diagnostic
+```
+
+This mode completes each qualified catalogue without a state limit; omit
+`--max-states`. Unqualified catalogues are recorded without enumeration.
+`state_space_diagnostics.jsonl` is flushed at unit start and after enumeration
+and eligibility assessment, so an interrupted run retains its latest phase
+evidence. The final `run_result.json` has status `state_space_only` and lists
+the catalogue, species tree, progress diagnostics, and preparation outputs
+when generated. This status is not a completed inference result and cannot be
+rendered as one.
+
 ```bash
 intraphy analyze --input-dir prepared_case \
   --exon-configurations exon_configurations.jsonl \

@@ -7,6 +7,14 @@ from ..topology import SpeciesTree
 
 
 def validate_analysis_options(args):
+    if (getattr(args, "command", None) == "analyze"
+            and getattr(args, "state_space_only", False)
+            and getattr(args, "model", None) != "exon-structure-ctmc"):
+        raise ValueError("--state-space-only requires --model exon-structure-ctmc.")
+    if (getattr(args, "command", None) == "analyze"
+            and getattr(args, "state_space_only", False)
+            and getattr(args, "max_states", None) is not None):
+        raise ValueError("--state-space-only requires complete state spaces; omit --max-states.")
     if getattr(args, "command", None) != "analyze" or getattr(args, "model", None) != "exon-structure-ctmc":
         if getattr(args, "alignment_evidence_dir", None):
             raise ValueError("--alignment-evidence-dir requires --model exon-structure-ctmc.")

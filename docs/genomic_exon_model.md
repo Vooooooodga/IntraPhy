@@ -29,6 +29,16 @@ be relabelled for this model.
 during genomic alignment preparation, then controls parallel family fits.
 MAFFT receives `--thread N --threadit 0`; `threadtb` remains at its default.
 
+`analyze --state-space-only` runs genomic exon catalogue preparation, complete
+state enumeration, and annotation-view observation eligibility assessment. It
+does not fit family rates or evaluate CTMC probabilities. Qualified catalogues
+are enumerated without a state-count limit, and unqualified catalogues are
+recorded as not enumerated. Its result manifest uses status `state_space_only`;
+the flushed `state_space_diagnostics.jsonl` records each unit before
+enumeration and after eligibility assessment. An interrupted run retains the
+latest completed phase. This output is a diagnostic record rather than a
+completed inference result.
+
 ## State and transition process
 
 A local unit represents an ordered exon-span geometry together with the
