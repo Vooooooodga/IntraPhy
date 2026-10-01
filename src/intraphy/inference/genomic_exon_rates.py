@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import math
+from functools import lru_cache
 import numpy as np
 from scipy.optimize import minimize
 
 from ..structure.edits import EDIT_KINDS
 from .configuration_model import RateModel, evaluate_model
+from .configuration_fit_cache import CommonRateKernels
+from .kernel_cache import KernelCache
 from .locus_rates import _local_curvature
 
 
@@ -25,12 +28,17 @@ def fit_family_rate(units, branch_length_mode="supplied", max_origins=None):
         return {"status": "flat_or_nonidentified", "converged": False, "mu": None,
                 "reason": "tree_has_no_positive_branch_length"}
 
+    template_cache = KernelCache()
+    templates = [CommonRateKernels(unit["space"], template_cache) for unit in units]
+
+    @lru_cache(maxsize=128)
     def log_likelihood(x):
         model = _model(float(x)/exposure)
         values = [float(evaluate_model(unit["space"], unit["tree"], unit["tips"], model,
             max_origins=max_origins, posterior=False, counts=False,
-            branch_length_mode=branch_length_mode, backend="sparse")["log_likelihood"])
-            for unit in units]
+            branch_length_mode=branch_length_mode, backend="sparse",
+            sparse_templates=template)["log_likelihood"])
+            for unit, template in zip(units, templates)]
         return float(sum(values)) if all(np.isfinite(values)) else -math.inf
 
     def objective(point):

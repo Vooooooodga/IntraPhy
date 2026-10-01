@@ -53,7 +53,7 @@ def generator(space: StateSpace, model: RateModel, origins: dict[str, str], chil
 def evaluate_model(space: StateSpace, tree, tips, model: RateModel, *,
                    max_origins: int | None = None, posterior: bool = True,
                    counts: bool = True, branch_length_mode: str = "supplied",
-                   backend: str = "dense"):
+                   backend: str = "dense", sparse_templates=None):
     if not space.complete:
         raise ValueError("state_space_incomplete")
     if not model.foreground <= set(tree.parent)-{tree.root}:
@@ -64,6 +64,8 @@ def evaluate_model(space: StateSpace, tree, tips, model: RateModel, *,
         raise ValueError("Unknown likelihood backend")
     if backend == "sparse" and (posterior or counts):
         raise ValueError("Sparse backend currently supports likelihood only; set posterior=False, counts=False")
+    if sparse_templates is not None and backend != "sparse":
+        raise ValueError("Sparse generator templates require the sparse backend")
     context = canonical_tree(tree, model.foreground)
     tree = context.tree
     if any(n != tree.root and len(tree.children.get(n, ())) == 1 for n in tree.parent):
@@ -88,7 +90,10 @@ def evaluate_model(space: StateSpace, tree, tips, model: RateModel, *,
                                         if origin == child))
                 signature = (allowed, child in model.foreground)
                 generators[child] = cache.get_or_compute(
-                    signature, lambda child=child: sparse_generator(space, model, origins, child))
+                    signature, lambda child=child: (
+                        sparse_templates.generator(space, model, origins, child)
+                        if sparse_templates is not None else
+                        sparse_generator(space, model, origins, child)))
             conditional = likelihood_only(tree, tips, generators, lengths,
                                           root.astype(float)/root.sum())
             total = float(np.logaddexp(total, conditional + log_prior))
