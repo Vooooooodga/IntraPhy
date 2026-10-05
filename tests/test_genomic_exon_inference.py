@@ -68,15 +68,17 @@ class GenomicExonFitTests(unittest.TestCase):
             catalogue_path = Path(directory) / "catalogues.jsonl"
             write_catalogues(catalogue_path, (qualified, unqualified))
             output = Path(directory) / "output"
-            with patch("intraphy.inference.genomic_exon_run.fit_family_rate",
+            with patch("intraphy.inference.genomic_exon_family.fit_family_rate",
                        side_effect=AssertionError("rate fit called")), \
-                    patch("intraphy.inference.genomic_exon_run.fixed_family_fit",
+                    patch("intraphy.inference.genomic_exon_family.fixed_family_fit",
                           side_effect=AssertionError("fixed fit called")), \
-                    patch("intraphy.inference.genomic_exon_run.evaluate_model",
+                    patch("intraphy.inference.genomic_exon_family.evaluate_model",
                           side_effect=AssertionError("CTMC called")), \
-                    patch("intraphy.inference.genomic_exon_run.evaluate_compact",
+                    patch("intraphy.inference.genomic_exon_family.evaluate_compact",
                           side_effect=AssertionError("compact CTMC called")), \
                     patch("intraphy.inference.genomic_exon_run.state_rows",
+                          side_effect=AssertionError("state rows materialized")), \
+                    patch("intraphy.inference.genomic_exon_family.state_rows",
                           side_effect=AssertionError("state rows materialized")):
                 diagnostics = infer_genomic_exons(root, output,
                     configurations=catalogue_path, state_space_only=True)

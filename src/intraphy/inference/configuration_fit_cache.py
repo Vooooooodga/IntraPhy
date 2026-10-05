@@ -12,9 +12,10 @@ from .kernel_cache import KernelCache
 class CommonRateKernels:
     """Lazily scale unit-rate templates for one exact state space."""
 
-    def __init__(self, space, cache: KernelCache):
+    def __init__(self, space, cache: KernelCache, cache_lock=None):
         self._space = space
         self._cache = cache
+        self._cache_lock = cache_lock
         self._namespace = object()
         self._unit_model = RateModel({kind: 1. for kind in EDIT_KINDS})
 
@@ -28,8 +29,13 @@ class CommonRateKernels:
             raise ValueError("Sparse templates require equal edit rates")
         key = (self._namespace, tuple(sorted(
             material for material, origin in origins.items() if origin == child)))
-        template = self._cache.get_or_compute(
-            key, lambda: sparse_generator(space, self._unit_model, origins, child))
+        if self._cache_lock is None:
+            template = self._cache.get_or_compute(
+                key, lambda: sparse_generator(space, self._unit_model, origins, child))
+        else:
+            with self._cache_lock:
+                template = self._cache.get_or_compute(
+                    key, lambda: sparse_generator(space, self._unit_model, origins, child))
         coefficient = mu * model.scale * (
             model.foreground_multiplier if child in model.foreground else 1.)
         if not np.isfinite(coefficient) or coefficient < 0:

@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import math
 from functools import lru_cache
+import logging
+from threading import Lock
+from time import perf_counter
 import numpy as np
 from scipy.optimize import minimize
 
@@ -13,11 +16,15 @@ from .kernel_cache import KernelCache
 from .locus_rates import _local_curvature
 
 
+logger = logging.getLogger("intraphy")
+
+
 def _model(mu):
     return RateModel({kind: float(mu) for kind in EDIT_KINDS}, scale=1.)
 
 
-def fit_family_rate(units, branch_length_mode="supplied", max_origins=None):
+def fit_family_rate(units, branch_length_mode="supplied", max_origins=None, *,
+                    unit_map=None, family_id=None):
     """Fit a nonnegative rate per opportunity and branch length unit."""
     if not units:
         return {"status": "no_estimable_units", "converged": False, "mu": None}
@@ -29,16 +36,36 @@ def fit_family_rate(units, branch_length_mode="supplied", max_origins=None):
                 "reason": "tree_has_no_positive_branch_length"}
 
     template_cache = KernelCache()
-    templates = [CommonRateKernels(unit["space"], template_cache) for unit in units]
+    cache_lock = Lock()
+    templates = [CommonRateKernels(unit["space"], template_cache, cache_lock)
+                 for unit in units]
+    ordered_map = map if unit_map is None else unit_map
 
     @lru_cache(maxsize=128)
     def log_likelihood(x):
+        started = perf_counter()
         model = _model(float(x)/exposure)
-        values = [float(evaluate_model(unit["space"], unit["tree"], unit["tips"], model,
-            max_origins=max_origins, posterior=False, counts=False,
-            branch_length_mode=branch_length_mode, backend="sparse",
-            sparse_templates=template)["log_likelihood"])
-            for unit, template in zip(units, templates)]
+        def evaluate_unit(item):
+            index, (unit, template) = item
+            unit_id = unit.get("unit_id", f"unit-{index}")
+            unit_started = perf_counter()
+            logger.info("Family unit likelihood started: family=%s unit=%s x=%.17g",
+                        family_id, unit_id, x)
+            try:
+                value = float(evaluate_model(unit["space"], unit["tree"], unit["tips"], model,
+                    max_origins=max_origins, posterior=False, counts=False,
+                    branch_length_mode=branch_length_mode, backend="sparse",
+                    sparse_templates=template)["log_likelihood"])
+            except BaseException:
+                logger.exception("Family unit likelihood failed: family=%s unit=%s x=%.17g elapsed_seconds=%.6f",
+                                 family_id, unit_id, x, perf_counter() - unit_started)
+                raise
+            logger.info("Family unit likelihood completed: family=%s unit=%s x=%.17g elapsed_seconds=%.6f",
+                         family_id, unit_id, x, perf_counter() - unit_started)
+            return value
+        values = list(ordered_map(evaluate_unit, enumerate(zip(units, templates))))
+        logger.info("Family likelihood evaluation completed: family=%s x=%.17g elapsed_seconds=%.6f",
+                    family_id, x, perf_counter() - started)
         return float(sum(values)) if all(np.isfinite(values)) else -math.inf
 
     def objective(point):
@@ -140,11 +167,27 @@ def fit_family_rate(units, branch_length_mode="supplied", max_origins=None):
         "optimizer": "scipy.optimize.minimize(method='L-BFGS-B', bounds=[(0, None)])"}
 
 
-def fixed_family_fit(units, rates, branch_length_mode="supplied", max_origins=None):
-    values = [float(evaluate_model(unit["space"], unit["tree"], unit["tips"], rates,
-        max_origins=max_origins, posterior=False, counts=False,
-        branch_length_mode=branch_length_mode, backend="sparse")["log_likelihood"])
-        for unit in units]
+def fixed_family_fit(units, rates, branch_length_mode="supplied", max_origins=None, *,
+                     unit_map=None, family_id=None):
+    ordered_map = map if unit_map is None else unit_map
+    def evaluate_unit(item):
+        index, unit = item
+        unit_id = unit.get("unit_id", f"unit-{index}")
+        started = perf_counter()
+        logger.info("Family unit likelihood started: family=%s unit=%s x=fixed",
+                    family_id, unit_id)
+        try:
+            value = float(evaluate_model(unit["space"], unit["tree"], unit["tips"], rates,
+                max_origins=max_origins, posterior=False, counts=False,
+                branch_length_mode=branch_length_mode, backend="sparse")["log_likelihood"])
+        except BaseException:
+            logger.exception("Family unit likelihood failed: family=%s unit=%s x=fixed elapsed_seconds=%.6f",
+                             family_id, unit_id, perf_counter() - started)
+            raise
+        logger.info("Family unit likelihood completed: family=%s unit=%s x=fixed elapsed_seconds=%.6f",
+                     family_id, unit_id, perf_counter() - started)
+        return value
+    values = list(ordered_map(evaluate_unit, enumerate(units)))
     ll = float(sum(values)) if values and all(np.isfinite(values)) else -math.inf
     return {"status": "fixed_parameters", "converged": True,
         "log_likelihood": ll if np.isfinite(ll) else None,

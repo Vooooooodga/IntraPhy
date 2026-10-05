@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from concurrent.futures import ProcessPoolExecutor
 from dataclasses import asdict
 import json
 from pathlib import Path
@@ -11,7 +10,6 @@ import numpy as np
 
 from ..run_result import RunResult
 from ..storage.tabular import write_tsv
-from ..structure.edits import EDIT_KINDS
 from ..structure.observations import observation_scenarios
 from ..structure.prepare import prepare_configurations
 from ..structure.serialization import json_safe, read_catalogues, write_catalogues
@@ -20,65 +18,13 @@ from ..structure.tree_context import canonical_tree, tree_rows as normalized_row
 from ..structure.validation import validate_collection
 from ..inputs.species_tree import read_species_tree_rows, select_species_tree_rows
 from ..topology import SpeciesTree
-from .configuration_model import RateModel, evaluate_model
-from .configuration_compact import evaluate_compact
-from .genomic_exon_rates import fit_family_rate, fixed_family_fit
+from .configuration_model import RateModel
+from .genomic_exon_family import run_family_tasks
 from .genomic_exon_output import assemble_rows, state_rows, write_outputs
 from .genomic_exon_branches import branch_change_rows
 
 
 MODEL = "exon-structure-ctmc"
-
-
-def _analyze_family(payload):
-    family, units, parameters = payload
-    mode = parameters["parameter_mode"]
-    if mode == "fit":
-        fit = fit_family_rate(units, parameters["branch_length_mode"], parameters["max_origins"])
-        rate_model = None if not fit.get("converged") or fit.get("mu") is None else RateModel(
-            {kind: fit["mu"] for kind in EDIT_KINDS}, scale=1.)
-    else:
-        rate_model = parameters["rates"]
-        fit = fixed_family_fit(units, rate_model, parameters["branch_length_mode"],
-                               parameters["max_origins"])
-    unit_results = []
-    for unit in units:
-        record = {"family_id": family, "unit_id": unit["unit_id"],
-                  "status": fit["status"] if rate_model is None else "conditional_on_declared_catalogue",
-                  "log_likelihood": None,
-                  "ctmc": None, "states": state_rows(unit["space"])}
-        if rate_model is not None:
-            if parameters["expected_edits"]:
-                result = evaluate_model(unit["space"], unit["tree"], unit["tips"], rate_model,
-                    max_origins=parameters["max_origins"], posterior=True, counts=True,
-                    branch_length_mode=parameters["branch_length_mode"])
-            else:
-                result = evaluate_compact(unit["space"], unit["tree"], unit["tips"], rate_model,
-                    max_origins=parameters["max_origins"], counts=False,
-                    branch_length_mode=parameters["branch_length_mode"])
-            record["log_likelihood"] = result["log_likelihood"]
-            record["ctmc"] = json_safe(result)
-            if not np.isfinite(result["log_likelihood"]):
-                record["status"] = "zero_probability_under_supplied_or_fitted_parameters"
-            else:
-                record["status"] = fit["status"]
-        unit_results.append(record)
-    return {"family_id": family, "fit": fit, "units": unit_results}
-
-
-def _fit_family_safely(payload):
-    try:
-        return _analyze_family(payload)
-    except ValueError as exc:
-        if "origin_scenarios_incomplete" not in str(exc):
-            raise
-        family, units, _ = payload
-        return {"family_id": family, "fit": {"status": "origin_scenarios_incomplete",
-                    "converged": False, "mu": None, "reason": str(exc)},
-                "units": [{"family_id": family, "unit_id": unit["unit_id"],
-                           "status": "origin_scenarios_incomplete", "log_likelihood": None,
-                           "ctmc": None, "states": state_rows(unit["space"])}
-                          for unit in units]}
 
 
 def _write_state_space_progress(handle, record):
@@ -243,12 +189,7 @@ def infer_genomic_exons(input_dir, output_dir, *, configurations=None, rates=Non
         "expected_edits": expected_edits}
     tasks = [(family, units, worker_parameters)
              for family, units in sorted(family_units.items())]
-    effective_threads = min(threads, len(tasks)) if tasks else 1
-    if effective_threads > 1:
-        with ProcessPoolExecutor(max_workers=effective_threads) as pool:
-            family_results = list(pool.map(_fit_family_safely, tasks))
-    else:
-        family_results = [_fit_family_safely(task) for task in tasks]
+    family_results, effective_threads, effective_unit_workers = run_family_tasks(tasks, threads)
     fit_by_family = {item["family_id"]: item["fit"] for item in family_results}
     result_by_unit = {(result["family_id"], result["unit_id"]): result
                       for family_result in family_results for result in family_result["units"]}
@@ -274,7 +215,8 @@ def infer_genomic_exons(input_dir, output_dir, *, configurations=None, rates=Non
     fit_record = {"model": MODEL, "parameter_mode": parameter_mode,
         "objective_scope": "conditional_composite_likelihood_within_family_across_local_units",
         "families": fit_by_family,
-        "requested_threads": threads, "effective_family_workers": effective_threads}
+        "requested_threads": threads, "effective_family_workers": effective_threads,
+        "effective_unit_workers": effective_unit_workers}
     completed_status = "completed_with_unresolved" if unresolved else "completed"
     diagnostics = {"model": MODEL,
         "method_scope": "constrained_elementary_edit_graph_conditional_composite_likelihood",
@@ -294,7 +236,8 @@ def infer_genomic_exons(input_dir, output_dir, *, configurations=None, rates=Non
         "origin_prior": "declared_root_weight_and_unit_weight_per_canonical_branch_opportunity_before_observation",
         "tree_normalization": context.diagnostics(), "input_species_tree": input_tree_rows,
         "deletion_reversible": False, "threads": {"requested": threads,
-            "effective_family_workers": effective_threads},
+            "effective_family_workers": effective_threads,
+            "effective_unit_workers": effective_unit_workers},
         "preparation": preparation_reports, "units": diagnostic_units,
         "unresolved": unresolved}
     artifacts = write_outputs(out, tree=tree_table, details=details, summaries=summaries,

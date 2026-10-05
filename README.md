@@ -44,10 +44,11 @@ material-origin opportunity has weight one.
 There is no default state-count cap; `--max-states` and
 `--max-origin-scenarios` are explicit limits. Use `check` and `build-case` for
 staged input inspection or reuse.
-`--threads` defaults to 1 and sets the per-family MAFFT and minimap2 thread
-counts during genomic catalogue preparation, as well as the number of
-independent family fits. MAFFT uses `--thread N --threadit 0`; `threadtb` is
-left at the MAFFT default.
+`--threads` defaults to 1 and sets MAFFT/minimap2 preparation threads (MAFFT
+uses `--thread N --threadit 0`; `threadtb` stays at its default). During
+inference, multiple families run in parallel; for one family, threads schedule
+local-unit likelihood and posterior work, capped by the number of eligible
+units. Process and thread pools are not nested. Keep OpenMP/BLAS threads at 1.
 See [genomic input requirements](docs/inputs.md) and the
 [command guide](docs/cli.md) for options and output interpretation.
 

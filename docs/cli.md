@@ -81,10 +81,14 @@ exon catalogue, supply `--exon-configurations` with `--input-dir`; every record
 must declare `observation_unit="genomic_exon_spans"`. Legacy transcript-path
 catalogues are rejected for this route. A fixed rate file requires
 `--exon-rates FILE --parameter-mode fixed`.
-`--threads` defaults to 1. During genomic catalogue preparation it sets the
-per-family MAFFT and minimap2 thread counts; MAFFT receives `--thread N
---threadit 0`, with `threadtb` left at its default. The same value controls
-parallel independent family fits.
+`--threads` defaults to 1 and sets per-family MAFFT/minimap2 preparation
+threads; MAFFT uses `--thread N --threadit 0`, with `threadtb` at its default.
+During inference, multiple families run in parallel. With one family, threads
+schedule local-unit likelihood and posterior work, capped by the number of
+eligible units. The process and thread pools are not nested; the longest unit
+remains serial and can limit speed. Keep OpenMP/BLAS threads at 1. `intraphy.log`
+records family-fit, unit-likelihood, and unit-posterior stages; these markers
+support diagnosis and do not provide restart or recovery.
 
 To enumerate every qualified genomic exon state space and assess observation
 eligibility without fitting a rate or evaluating the CTMC, add
