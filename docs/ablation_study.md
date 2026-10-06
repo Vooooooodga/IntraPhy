@@ -1,22 +1,31 @@
-# Planned ablation study
+# Planned DNA copy model ablations
 
 ## Question and status
 
-This protocol asks which evidence and DNA-event assumptions improve
-cross-species mapping of homologous intragenic structure and phylogenetic
-reconstruction of qualified DNA-copy histories. It is a planned study. No
+This protocol asks which mapping evidence and DNA-copy event assumptions
+affect reconstruction under the advanced `exon-locus-ctmc` process, using
+supplied `intraphy.exon-locus-model/2` catalogues. It is a planned study. No
 simulation, empirical benchmark, calibration result, performance threshold,
-or resource estimate is reported here.
+or resource estimate is reported here. The contrasts assess DNA-copy histories
+for these declared catalogue inputs; they do not test the default
+`exon-structure-ctmc` or its genomic-exon mapping and preparation pipeline. The
+default model follows physical genomic exon spans and models boundary
+displacement, exon split and fusion, exonization, inactivation, and DNA
+insertion and deletion. Its scope and assumptions are described in the
+[genomic exon-span model](genomic_exon_model.md).
 
-The target starts with genomic sequences and existing gene annotations. Exon
-and intron coordinates, exon boundaries, CDS phase, strand, and copy order
-support correspondence. Multiple transcript records describing one physical
-DNA interval are deduplicated. Missing annotation and unresolved sequence
-correspondence are unknown; deletion requires surveyed sequence evidence.
-These are correctness requirements in every arm, not ablated options. The
-current likelihood infers DNA-copy presence and events. Annotation boundary
-and intron-position differences are mapping outputs, with no separate
-phylogenetic event process in this experiment.
+Contrast 1 varies how sequence and genomic context are used to map homologous
+DNA-copy positions and qualify copy opportunities. Its context/order arm
+examines local intron/exon context, CDS phase, collinearity, and copy order as
+planned mapping evidence; these are experiment-specific assumptions. CDS
+phase remains annotation metadata and does not score or qualify correspondence
+in the default exon-span model. Multiple transcript records describing one
+physical DNA interval are deduplicated. Missing annotation and unresolved
+sequence correspondence are unknown; deletion requires surveyed sequence
+evidence. These are correctness requirements in every arm, not ablated
+options. The likelihood in this experiment infers DNA-copy presence and
+events. Annotation boundary and intron-position differences are mapping
+outputs, with no separate phylogenetic event process in this experiment.
 
 ## Prespecified contrasts
 
