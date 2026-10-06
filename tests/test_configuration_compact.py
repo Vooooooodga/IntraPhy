@@ -183,6 +183,8 @@ class ConfigurationCompactTests(unittest.TestCase):
                                             block_size=16, cache_bytes=0)
         self.assertTrue(all("endpoint_probabilities" not in branch
                             for branch in large_result["branches"]))
+        self.assertTrue(all(branch["probability_at_least_one_edit"] == 0.
+                            for branch in large_result["branches"]))
 
     def test_counts_are_rejected_in_compact_backend(self):
         space, tree = _space(), _tree()

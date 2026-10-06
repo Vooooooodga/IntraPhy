@@ -1,4 +1,4 @@
-"""Exact likelihood-only pruning over subsets of origin opportunities."""
+"""Exact origin-subset tree recursion for likelihoods and posterior messages."""
 from __future__ import annotations
 
 import math
@@ -46,14 +46,13 @@ def _checked_sum(left, right):
     return value
 
 
-def likelihood_origin_dp(space, tree, tips, model, lengths, cache, *,
-                         max_origins=None, sparse_templates=None):
-    """Marginalize origin assignments exactly without enumerating scenarios.
+def origin_subset_tables(space, tree, tips, model, lengths, cache, *,
+                         max_origins=None, sparse_templates=None,
+                         retain_tables=False):
+    """Build exact inside subset tables and their normalized root messages.
 
-    Each inside table maps a subset of tracts introduced strictly below its
-    node to the statewise log likelihood. Opportunity assignments on the edge
-    to a child are combined with the child's disjoint subset before that
-    edge's origin-conditional CTMC action.
+    Retained posterior tables use O(nodes * 2**tracts * states) memory.
+    Likelihood-only callers stream child tables and retain only the root.
     """
     if max_origins is not None:
         if type(max_origins) is not int or max_origins < 1:
@@ -110,7 +109,8 @@ def likelihood_origin_dp(space, tree, tips, model, lengths, cache, *,
                             edge_table[total_subset], value)
                     else:
                         edge_table[total_subset] = value
-            inside.pop(child)
+            if not retain_tables:
+                inside.pop(child)
             next_combined = {}
             for left_mask, left_value in combined.items():
                 for right_mask, right_value in edge_table.items():
@@ -127,7 +127,7 @@ def likelihood_origin_dp(space, tree, tips, model, lengths, cache, *,
 
     root_mask = node_masks[tree.root]
     denominator = model.origin_root_weight + len(tree.parent) - 1
-    terms = []
+    root_outside = {}
     for assigned, values in inside[tree.root].items():
         inherited = all_mask ^ assigned
         if inherited & ~root_mask:
@@ -138,12 +138,24 @@ def likelihood_origin_dp(space, tree, tips, model, lengths, cache, *,
         count = int(valid.sum())
         if count == 0:
             continue
-        with np.errstate(divide="ignore"):
-            root_ll = float(logsumexp(values[valid]) - math.log(count))
         log_prior = (inherited.bit_count() * math.log(model.origin_root_weight)
                      - k * math.log(denominator))
-        terms.append(root_ll + log_prior)
+        root_value = np.full(len(space.states), -math.inf)
+        root_value[valid] = log_prior - math.log(count)
+        root_outside[assigned] = root_value
+    terms = [logsumexp(root_outside[assigned] + values)
+             for assigned, values in inside[tree.root].items()
+             if assigned in root_outside]
     total = float(logsumexp(terms)) if terms else -math.inf
     if math.isnan(total) or total == math.inf:
         raise ArithmeticError("Sparse origin-subset pruning produced a nonfinite log likelihood")
-    return total
+    return {"log_likelihood": total, "inside": inside, "root_outside": root_outside,
+            "node_masks": node_masks, "material_ids": material_ids,
+            "edge_generator": edge_generator}
+
+
+def likelihood_origin_dp(space, tree, tips, model, lengths, cache, *,
+                         max_origins=None, sparse_templates=None):
+    """Marginalize origin assignments exactly without enumerating scenarios."""
+    return origin_subset_tables(space, tree, tips, model, lengths, cache,
+        max_origins=max_origins, sparse_templates=sparse_templates)["log_likelihood"]

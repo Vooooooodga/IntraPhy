@@ -1,26 +1,14 @@
-"""Compact floating-point posteriors for complete configuration CTMCs.
-
-This backend retains state and origin priors while replacing dense endpoint
-matrices with exponential actions and observable-group contractions. Its model
-matches the dense backend up to numerical floating-point tolerance.
-"""
+"""Compact floating-point posteriors for complete configuration CTMCs."""
 from __future__ import annotations
 
-import math
-from dataclasses import replace
 import numpy as np
-from scipy.special import logsumexp
+from dataclasses import replace
 
-from ..structure.origins import origin_scenarios
 from ..structure.tree_context import canonical_tree
-from .configuration_sparse import _possible, log_action, sparse_generator
-from .configuration_compact_modes import branch_scalars, modal_rows
+from .configuration_compact_modes import action_columns as _action_columns
+from .configuration_compact_modes import masked_columns as _masked_columns
+from .configuration_origin_posterior import evaluate_origin_posterior
 from .kernel_cache import KernelCache
-
-
-def _log(values):
-    with np.errstate(divide="ignore"):
-        return np.log(values)
 
 
 def _observable(state):
@@ -35,90 +23,15 @@ def _group(values):
     return unique, np.asarray([lookup[value] for value in values], dtype=np.int64)
 
 
-def _action_columns(q, length, log_values):
-    """Apply log_action while independently scaling each finite RHS column."""
-    if np.isnan(log_values).any() or np.isposinf(log_values).any():
-        raise ArithmeticError("Log likelihood input contains NaN or positive infinity")
-    shifts = np.max(log_values, axis=0)
-    valid = np.isfinite(shifts)
-    result = np.full(log_values.shape, -np.inf, dtype=float)
-    if valid.any():
-        normalized = log_values[:, valid] - shifts[valid][None, :]
-        result[:, valid] = log_action(q, length, normalized) + shifts[valid][None, :]
-    return result
-
-
-def _masked_columns(log_vector, groups, group_ids):
-    values = np.full((len(log_vector), len(group_ids)), -np.inf, dtype=float)
-    for column, group_id in enumerate(group_ids):
-        mask = groups == group_id
-        values[mask, column] = log_vector[mask]
-    return values
-
-
-def _scenario_payload(space, tree, tips, model, origins, root, lengths, generator_cache):
-    generators = {}
-    for _, child in tree.edges():
-        allowed = tuple(sorted(material for material, origin in origins.items()
-                               if origin == child))
-        signature = ("Q", allowed, child in model.foreground)
-        generators[child] = generator_cache.get_or_compute(signature, lambda child=child:
-            sparse_generator(space, model, origins, child))
-    inside, messages, siblings = {}, {}, {}
-    for node in tree.postorder():
-        children = tuple(tree.children.get(node, ()))
-        if not children:
-            inside[node] = _log(np.asarray(tips[tree.label[node]], dtype=float))
-            continue
-        terms = []
-        for child in children:
-            messages[child] = log_action(generators[child], lengths[child], inside[child])
-            terms.append(messages[child])
-        inside[node] = sum(terms, start=np.zeros(len(root)))
-        for index, child in enumerate(children):
-            siblings[child] = sum((value for j, value in enumerate(terms) if j != index),
-                                  start=np.zeros(len(root)))
-    log_root = _log(root.astype(float) / root.sum())
-    ll = float(logsumexp(log_root + inside[tree.root]))
-    if not np.isfinite(ll):
-        if np.isnan(ll) or ll == np.inf:
-            raise ArithmeticError("Compact pruning produced a nonfinite log likelihood")
-        if _possible(tree, tips, generators, lengths, root.astype(float) / root.sum()):
-            raise ArithmeticError("Compact pruning collapsed a structurally possible likelihood")
-        return {"log_likelihood": ll, "generators": generators,
-                "inside": inside, "outside": {}}
-    outside = {tree.root: log_root}
-    for parent in tree.preorder():
-        for child in tree.children.get(parent, ()):
-            base = outside[parent] + siblings[child]
-            outside[child] = log_action(generators[child].T, lengths[child], base)
-    return {"log_likelihood": ll, "generators": generators,
-            "inside": inside, "outside": outside, "siblings": siblings}
-
-
-def _node_marginals(payload, tree):
-    ll = payload["log_likelihood"]
-    return {node: np.exp(payload["outside"][node] + payload["inside"][node] - ll)
-            for node in tree.preorder()}
-
-
-def _scenario_key(origins):
-    return ("scenario", tuple(sorted(origins.items())))
-
-
-def _get_payload(cache, generator_cache, key, space, tree, tips, model, origins, root, lengths):
-    return cache.get_or_compute(key, lambda: _scenario_payload(
-        space, tree, tips, model, origins, root, lengths, generator_cache))
-
-
 def evaluate_compact(space, tree, tips, model, *, max_origins=None,
                      branch_length_mode="supplied", counts=False,
                      block_size=32, cache_bytes=128 * 1024 * 1024,
                      tie_atol=1e-12, tie_rtol=1e-12):
-    """Evaluate full-model state/node/branch posteriors without endpoint matrices.
+    """Evaluate compact posteriors using exact origin-subset messages.
 
-    Expected edit counts are intentionally unsupported by this compact path.
-    Floating-point tie tolerances affect which observable pairs are reported.
+    Inside and outside message tables retain O(nodes * 2**tracts * states)
+    workspace. Joint origin weights still require one sparse scenario sweep.
+    Expected edit counts remain unsupported by this compact path.
     """
     if counts:
         raise ValueError("Compact posterior currently supports counts=False only")
@@ -155,45 +68,20 @@ def evaluate_compact(space, tree, tips, model, *, max_origins=None,
     dna_configurations, dna_groups = _group([value[1] for value in configurations])
     state_exon_groups = np.asarray([exon_groups[group] for group in state_groups])
     state_dna_groups = np.asarray([dna_groups[group] for group in state_groups])
-    state_exon_counts = np.asarray([len(state.exons) for state in space.states], dtype=np.int64)
-    generator_cache = KernelCache(maximum_bytes=cache_bytes // 2)
-    cache = KernelCache(maximum_bytes=cache_bytes - cache_bytes // 2)
-    total = -math.inf
-    nodes, branches, origin_logweights = {}, {}, []
-    for origins, root, log_prior in origin_scenarios(
-            space, tree, max_origins, tips=tips,
-            root_weight=model.origin_root_weight):
-        key = _scenario_key(origins)
-        payload = _get_payload(cache, generator_cache, key, space, tree, tips,
-                               model, origins, root, lengths)
-        ll = payload["log_likelihood"]
-        if not np.isfinite(ll):
-            continue
-        log_weight = ll + log_prior
-        next_total = float(np.logaddexp(total, log_weight))
-        old_weight = math.exp(total - next_total) if np.isfinite(total) else 0.
-        new_weight = math.exp(log_weight - next_total)
-        total = next_total
-        node_values = _node_marginals(payload, tree)
-        scalar_values = branch_scalars(payload, tree, lengths,
-            state_exon_groups, len(exon_configurations),
-            state_dna_groups, len(dna_configurations), block_size,
-            _masked_columns, _action_columns, state_exon_counts)
-        for node, values in node_values.items():
-            if node not in nodes:
-                nodes[node] = np.zeros_like(values)
-            nodes[node] *= old_weight
-            nodes[node] += new_weight * values
-        for edge, values in scalar_values.items():
-            if edge not in branches:
-                branches[edge] = {name: 0. for name in values}
-            for name, value in values.items():
-                branches[edge][name] *= old_weight
-                branches[edge][name] += new_weight * value
-        origin_logweights.append((origins, log_weight))
-
-    base = {"log_likelihood": total, "nodes": nodes, "branches": [],
-            "origins": [], "posterior_kind": "compact_observable_pairs",
+    state_exon_counts = np.asarray([len(state.exons) for state in space.states],
+                                   dtype=np.int64)
+    generator_cache = KernelCache(maximum_bytes=cache_bytes)
+    posterior = evaluate_origin_posterior(space, tree, tips, model, lengths,
+        max_origins=max_origins, block_size=block_size, tie_atol=tie_atol,
+        tie_rtol=tie_rtol, configurations=configurations,
+        state_groups=state_groups, exon_groups=state_exon_groups,
+        exon_count=len(exon_configurations), dna_groups=state_dna_groups,
+        dna_count=len(dna_configurations),
+        state_exon_counts=state_exon_counts,
+        generator_cache=generator_cache)
+    total = posterior["log_likelihood"]
+    base = {"log_likelihood": total, "nodes": posterior["nodes"], "branches": [],
+            "origins": posterior["origins"], "posterior_kind": "compact_observable_pairs",
             "root_prior": "uniform_valid_exon_geometries_given_origin_opportunities",
             "origin_prior": "declared_root_weight_and_unit_branch_opportunities_on_canonical_tree",
             "origin_root_weight": model.origin_root_weight,
@@ -203,19 +91,8 @@ def evaluate_compact(space, tree, tips, model, *, max_origins=None,
     if not np.isfinite(total):
         base["nodes"] = {}
         return base
-    def get_payload(origins, root):
-        return _get_payload(cache, generator_cache, _scenario_key(origins),
-            space, tree, tips, model, origins, root, lengths)
-    modal = modal_rows(space, tree, tips, lengths, max_origins, total,
-        model.origin_root_weight, nodes, configurations, state_groups,
-        block_size, tie_atol, tie_rtol, get_payload, _masked_columns,
-        _action_columns)
-    base["nodes"] = nodes
-    base["origins"] = [{"origins": origins,
-                         "posterior_weight": float(math.exp(log_weight - total))}
-                        for origins, log_weight in origin_logweights]
     for edge in tree.edges():
-        values = branches[edge]
+        values = posterior["branches"][edge]
         count_pairs = [
             {"parent_count": parent_count, "child_count": child_count,
              "probability": float(values["exon_count_pair_probabilities"][parent_count,
@@ -231,10 +108,12 @@ def evaluate_compact(space, tree, tips, model, *, max_origins=None,
                 "probability_exon_count_increase": values["probability_exon_count_increase"],
                 "probability_exon_count_decrease": values["probability_exon_count_decrease"],
                 "probability_exon_count_unchanged": values["probability_exon_count_unchanged"],
-                **modal[edge]}})
-    base["kernel_cache"] = {"hits": cache.hits, "misses": cache.misses,
-                            "retained_bytes": cache.bytes,
-                            "limit_bytes": cache.maximum_bytes,
-                            "generator_retained_bytes": generator_cache.bytes,
-                            "generator_limit_bytes": generator_cache.maximum_bytes}
+                **posterior["modal"][edge]}})
+    # Cache counters and byte fields now describe the shared generator cache.
+    base["kernel_cache"] = {"hits": generator_cache.hits,
+        "misses": generator_cache.misses,
+        "retained_bytes": generator_cache.bytes,
+        "limit_bytes": generator_cache.maximum_bytes,
+        "generator_retained_bytes": generator_cache.bytes,
+        "generator_limit_bytes": generator_cache.maximum_bytes}
     return base

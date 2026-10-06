@@ -174,12 +174,20 @@ origin assignment sum without truncation. Log-space summation can differ from
 scenario-by-scenario evaluation at roundoff scale; a numerically collapsed
 contribution from a reachable state raises an error.
 
-Dense and compact posterior inference continue to evaluate joint origin
-scenarios exhaustively and can remain costly as the number of material tracts
-grows. The compact evaluator also contracts states that share the same
-observable exon geometry and declared DNA-presence pattern. It retains
-state-order node marginals and reports observable joint endpoint modes and
-exon-count pair marginals without storing a full state-pair endpoint matrix.
+Compact posterior inference uses exact origin-subset inside and outside
+recursions. Each node retains full state likelihood vectors indexed by the
+subset of material tracts assigned below it; disjoint-subset contractions
+produce node marginals and branch summaries. Message-table workspace scales as
+O(nodes × 2^tracts × states). The compact result still reports joint origin
+posterior weights from one exhaustive likelihood-only pass over origin
+assignments. Total runtime remains dependent on tree size, tract count, state
+count, and the number of origin assignments; the subset recursion provides no
+general runtime guarantee. Dense posterior inference continues to evaluate
+origin scenarios separately. The compact evaluator contracts states that
+share the same observable exon geometry and declared DNA-presence pattern. It
+retains state-order node marginals and reports observable joint endpoint modes
+and exon-count pair marginals without storing a full state-pair endpoint
+matrix.
 Count-pair probabilities marginalize all states and material-origin scenarios
 under the same fitted CTMC; they describe parent/child endpoint counts rather
 than transition histories. Mode rows use absolute and relative tie tolerances

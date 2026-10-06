@@ -1,11 +1,12 @@
-"""Bounded exact search for modal observable endpoint pairs."""
+"""Blockwise compact branch summaries from origin-subset edge messages."""
 from __future__ import annotations
 
 import math
 import numpy as np
 from scipy.special import logsumexp
 
-from ..structure.origins import origin_scenarios
+from .configuration_origin_dp import _checked_product, _subsets
+from .configuration_sparse import _support_after_edge, log_action
 
 
 def _probability(value, label):
@@ -14,55 +15,98 @@ def _probability(value, label):
     return min(1., max(0., float(value)))
 
 
-def branch_scalars(payload, tree, lengths, exon_groups, exon_count,
-                   dna_groups, dna_count, block_size, masked_columns,
-                   action_columns, state_exon_counts):
-    """Compute branch change probabilities from grouped exponential actions."""
-    ll = payload["log_likelihood"]
+def action_columns(q, length, log_values):
+    """Apply a sparse exponential with independent column scaling and checks."""
+    if np.isnan(log_values).any() or np.isposinf(log_values).any():
+        raise ArithmeticError("Log likelihood input contains NaN or positive infinity")
+    shifts = np.max(log_values, axis=0)
+    valid = np.isfinite(shifts)
+    result = np.full(log_values.shape, -np.inf, dtype=float)
+    if valid.any():
+        normalized = log_values[:, valid] - shifts[valid][None, :]
+        acted = log_action(q, length, normalized)
+        for column in range(acted.shape[1]):
+            if np.isneginf(acted[:, column]).any():
+                reachable = _support_after_edge(
+                    q, length, np.isfinite(normalized[:, column]))
+                if np.any(reachable & ~np.isfinite(acted[:, column])):
+                    raise ArithmeticError(
+                        "Sparse origin-subset action collapsed a reachable likelihood")
+        result[:, valid] = acted + shifts[valid][None, :]
+    if np.isnan(result).any() or np.isposinf(result).any():
+        raise ArithmeticError("Sparse origin-subset action produced a nonfinite log likelihood")
+    return result
+
+
+def masked_columns(log_vector, groups, group_ids):
+    values = np.full((len(log_vector), len(group_ids)), -np.inf, dtype=float)
+    for column, group_id in enumerate(group_ids):
+        mask = groups == group_id
+        values[mask, column] = log_vector[mask]
+    return values
+
+
+def _components(child, inside, edge_outside, node_masks, edge_generator):
+    for below, child_value in inside[child].items():
+        for edge_mask in _subsets(node_masks[child]):
+            if edge_mask & below:
+                continue
+            combined = edge_mask | below
+            if combined in edge_outside[child]:
+                yield (edge_generator(child, edge_mask),
+                       edge_outside[child][combined], child_value)
+
+
+def branch_scalars(tree, lengths, inside, edge_outside, node_masks,
+                   edge_generator, exon_groups, exon_count,
+                   dna_groups, dna_count, state_exon_counts, block_size, total):
+    """Marginalize observable branch statistics across origin subsets."""
     output = {}
+    maximum_count = int(np.max(state_exon_counts, initial=0))
     for parent, child in tree.edges():
-        q = payload["generators"][child]
-        loga = payload["outside"][parent] + payload["siblings"][child]
-        logb = payload["inside"][child]
-        same = []
-        for groups, count in ((exon_groups, exon_count), (dna_groups, dna_count)):
-            equal = 0.
-            for start in range(0, count, block_size):
-                ids = range(start, min(start + block_size, count))
+        equal = [0., 0.]
+        no_edit = 0.
+        can_edit = False
+        count_joint = np.zeros((maximum_count + 1, maximum_count + 1))
+        for q, loga, logb in _components(child, inside, edge_outside,
+                                          node_masks, edge_generator):
+            can_edit |= lengths[child] > 0 and q.nnz > 0
+            no_edit_log = float(logsumexp(
+                loga + q.diagonal() * lengths[child] + logb) - total)
+            if np.isfinite(no_edit_log):
+                no_edit += math.exp(no_edit_log)
+            for slot, groups, count in ((0, exon_groups, exon_count),
+                                        (1, dna_groups, dna_count)):
+                for start in range(0, count, block_size):
+                    ids = range(start, min(start + block_size, count))
+                    acted = action_columns(q, lengths[child],
+                                           masked_columns(logb, groups, ids))
+                    parent_values = masked_columns(loga, groups, ids)
+                    masses = logsumexp(parent_values + acted, axis=0) - total
+                    equal[slot] += float(np.exp(masses[np.isfinite(masses)]).sum())
+            for start in range(0, maximum_count + 1, block_size):
+                child_counts = range(start, min(start + block_size, maximum_count + 1))
                 acted = action_columns(q, lengths[child],
-                                       masked_columns(logb, groups, ids))
-                parent_values = masked_columns(loga, groups, ids)
-                masses = logsumexp(parent_values + acted, axis=0) - ll
-                equal += float(np.exp(masses[np.isfinite(masses)]).sum())
-            same.append(_probability(equal, "same observable group"))
-        no_edit_log = float(logsumexp(
-            loga + q.diagonal() * lengths[child] + logb) - ll)
-        no_edit = float(np.exp(no_edit_log)) if np.isfinite(no_edit_log) else 0.
-        no_edit = _probability(no_edit, "no edit")
-        maximum_count = int(np.max(state_exon_counts, initial=0))
-        count_joint = np.zeros((maximum_count + 1, maximum_count + 1), dtype=float)
-        for start in range(0, maximum_count + 1, block_size):
-            child_counts = range(start, min(start + block_size, maximum_count + 1))
-            acted = action_columns(q, lengths[child],
-                                   masked_columns(logb, state_exon_counts, child_counts))
-            for parent_count in range(maximum_count + 1):
-                parent_values = np.full_like(loga, -np.inf)
-                parent_mask = state_exon_counts == parent_count
-                parent_values[parent_mask] = loga[parent_mask]
-                log_mass = logsumexp(parent_values[:, None] + acted, axis=0) - ll
-                if np.isnan(log_mass).any() or np.isposinf(log_mass).any():
-                    raise ArithmeticError("Invalid compact exon-count endpoint mass")
-                masses = np.zeros(len(tuple(child_counts)), dtype=float)
-                finite = np.isfinite(log_mass)
-                masses[finite] = np.exp(log_mass[finite])
-                count_joint[parent_count, start:start + len(masses)] += masses
+                    masked_columns(logb, state_exon_counts, child_counts))
+                for parent_count in range(maximum_count + 1):
+                    parent_mask = state_exon_counts == parent_count
+                    log_mass = logsumexp(
+                        np.where(parent_mask, loga, -np.inf)[:, None] + acted,
+                        axis=0) - total
+                    if np.isnan(log_mass).any() or np.isposinf(log_mass).any():
+                        raise ArithmeticError("Invalid compact exon-count endpoint mass")
+                    masses = np.zeros(len(tuple(child_counts)), dtype=float)
+                    finite = np.isfinite(log_mass)
+                    masses[finite] = np.exp(log_mass[finite])
+                    count_joint[parent_count, start:start + len(masses)] += masses
         count_up = float(np.triu(count_joint, k=1).sum())
         count_down = float(np.tril(count_joint, k=-1).sum())
         count_same = float(np.trace(count_joint))
+        any_edit = 1. - no_edit if can_edit else 0.
         output[(parent, child)] = {
-            "probability_exon_structure_change": _probability(1. - same[0], "exon change"),
-            "probability_dna_presence_change": _probability(1. - same[1], "DNA change"),
-            "probability_at_least_one_edit": _probability(1. - no_edit, "any edit"),
+            "probability_exon_structure_change": _probability(1. - equal[0], "exon change"),
+            "probability_dna_presence_change": _probability(1. - equal[1], "DNA change"),
+            "probability_at_least_one_edit": _probability(any_edit, "any edit"),
             "exon_count_pair_probabilities": count_joint,
             "probability_exon_count_increase": _probability(count_up, "exon-count increase"),
             "probability_exon_count_decrease": _probability(count_down, "exon-count decrease"),
@@ -71,36 +115,29 @@ def branch_scalars(payload, tree, lengths, exon_groups, exon_count,
     return output
 
 
-def modal_rows(space, tree, tips, lengths, max_origins, total_ll,
-               origin_root_weight, node_marginals, configurations,
-               state_groups, block_size, tie_atol, tie_rtol,
-               get_payload, masked_columns, action_columns):
-    """Find all numerically tied modes using posterior parent-mass bounds."""
+def modal_rows(tree, lengths, inside, edge_outside, node_marginals,
+               node_masks, edge_generator, configurations, state_groups,
+               block_size, tie_atol, tie_rtol, total):
+    """Find tied observable endpoint modes with the existing parent-mass bound."""
     group_count = len(configurations)
     output = {}
     for parent, child in tree.edges():
-        parent_mass = np.bincount(state_groups,
-            weights=node_marginals[parent], minlength=group_count)
+        parent_mass = np.bincount(state_groups, weights=node_marginals[parent],
+                                  minlength=group_count)
         order = np.argsort(-parent_mass, kind="stable")
         incumbent, candidates = -1., []
         finished, evaluated = False, 0
         for start in range(0, group_count, block_size):
             selected = order[start:min(start + block_size, group_count)]
-            joint = np.zeros((len(selected), group_count), dtype=float)
-            for origins, root, log_prior in origin_scenarios(
-                    space, tree, max_origins, tips=tips,
-                    root_weight=origin_root_weight):
-                payload = get_payload(origins, root)
-                ll = payload["log_likelihood"]
-                if not np.isfinite(ll):
-                    continue
-                weight = math.exp(ll + log_prior - total_ll)
-                loga = payload["outside"][parent] + payload["siblings"][child]
+            joint = np.zeros((len(selected), group_count))
+            for q, loga, logb in _components(child, inside, edge_outside,
+                                              node_masks, edge_generator):
                 masked = masked_columns(loga, state_groups, selected)
-                acted = action_columns(payload["generators"][child].T,
-                                       lengths[child], masked)
-                log_joint = acted + payload["inside"][child][:, None] - ll
-                state_mass = np.exp(log_joint) * weight
+                acted = action_columns(q.T, lengths[child], masked)
+                state_log_mass = _checked_product(acted, logb[:, None]) - total
+                if np.isnan(state_log_mass).any() or np.isposinf(state_log_mass).any():
+                    raise ArithmeticError("Invalid compact joint endpoint mass")
+                state_mass = np.exp(state_log_mass)
                 for column in range(len(selected)):
                     joint[column] += np.bincount(state_groups,
                         weights=state_mass[:, column], minlength=group_count)
@@ -119,19 +156,18 @@ def modal_rows(space, tree, tips, lengths, max_origins, total_ll,
                                        float(row[child_group])))
                 next_row = start + local + 1
                 if next_row < group_count:
-                    next_bound = float(parent_mass[order[next_row]])
-                    if next_bound + tolerance < incumbent:
+                    if parent_mass[order[next_row]] + tolerance < incumbent:
                         finished = True
                         break
             if finished:
                 break
         modes = [{
-            "parent_exons": configurations[parent_group][0],
-            "child_exons": configurations[child_group][0],
-            "parent_dna_presence": configurations[parent_group][1],
-            "child_dna_presence": configurations[child_group][1],
+            "parent_exons": configurations[p][0],
+            "child_exons": configurations[c][0],
+            "parent_dna_presence": configurations[p][1],
+            "child_dna_presence": configurations[c][1],
             "joint_configuration_probability": probability,
-        } for parent_group, child_group, probability in candidates
+        } for p, c, probability in candidates
           if abs(probability - incumbent) <= tie_atol + tie_rtol * abs(incumbent)]
         output[(parent, child)] = {"joint_modes": modes,
             "mode_tolerance": {"absolute": float(tie_atol), "relative": float(tie_rtol)},

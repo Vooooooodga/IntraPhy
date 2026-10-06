@@ -23,12 +23,16 @@ def origin_scenarios(space: StateSpace, tree, maximum: int | None = None, *, tip
     # Weights are declared before observations. Removed impossible opportunities
     # keep their prior mass; weights are not renormalized after seeing retention.
     denominator = root_weight + len(tree.parent)-1
+    root_masks = {}
     for choices in product(*candidates):
         log_prior = sum(math.log(root_weight) if n == tree.root else 0. for n in choices)
         log_prior -= len(candidates)*math.log(denominator)
         origins = dict(zip((m.id for m in space.catalogue.material), choices))
         required = tuple(1 if origins[m.id] == tree.root else 0 for m in space.catalogue.material)
-        root = np.array([s.material == required for s in space.states], dtype=bool)
+        if required not in root_masks:
+            root_masks[required] = np.array(
+                [s.material == required for s in space.states], dtype=bool)
+        root = root_masks[required].copy()
         if root.any():
             yield origins, root, log_prior
 
