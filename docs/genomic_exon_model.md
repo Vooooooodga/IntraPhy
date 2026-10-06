@@ -171,8 +171,14 @@ occur on that branch. At the root, each implied root-material mask uses its own
 uniform prior over valid exon geometries and the declared root and branch
 opportunity weights. The recursion includes the complete state catalogue and
 origin assignment sum without truncation. Log-space summation can differ from
-scenario-by-scenario evaluation at roundoff scale; a numerically collapsed
-contribution from a reachable state raises an error.
+scenario-by-scenario evaluation at floating-point roundoff scale. Sparse
+exponential actions retain their fast matrix-action path; if scaling or an
+action loses positive mass at structurally reachable states, affected columns
+are recomputed with log-domain uniformization. The positive-series tail is
+bounded relative to the smallest reachable partial contribution at machine
+precision, and recovery requires finite mass for every reachable state. No
+probability floor or state truncation is used; invalid nonfinite inputs or
+unrecoverable numerical failures still raise an error.
 
 Compact posterior inference uses exact origin-subset inside and outside
 recursions. Each node retains full state likelihood vectors indexed by the

@@ -8,6 +8,7 @@ from scipy.sparse.linalg import expm_multiply
 from scipy.special import logsumexp
 
 from ..structure.origins import permitted
+from .configuration_uniformization import log_uniformization_action
 
 
 def sparse_generator(space, model, origins, child):
@@ -53,29 +54,46 @@ def log_action(q, length, log_values):
         raise ArithmeticError("Log likelihood input contains NaN or positive infinity")
     if length == 0 or q.nnz == 0:
         return log_values.copy()
-    finite = np.isfinite(log_values)
+    values = log_values[:, None] if log_values.ndim == 1 else log_values
+    finite = np.isfinite(values)
     if not finite.any():
         return np.full(log_values.shape, -np.inf)
-    shift = float(np.max(log_values[finite]))
+    shift = float(np.max(values[finite]))
+    shifts = np.full(values.shape[1], shift)
+    valid = np.any(finite, axis=0)
+    normalized = np.full(values.shape, -np.inf)
+    with np.errstate(over="ignore"):
+        normalized[:, valid] = values[:, valid] - shift
     with np.errstate(under="ignore"):
-        vector = np.exp(log_values - shift)
-    if np.any((vector == 0) & finite):
-        raise ArithmeticError("Finite log likelihood underflowed before sparse action")
+        vector = np.exp(normalized)
+    lost_input = finite & (~np.isfinite(normalized) | (vector == 0))
+    fallback = valid & np.any(lost_input, axis=0)
+    fast_columns = np.flatnonzero(valid & ~fallback)
     a = q * length
     if not np.isfinite(a.data).all():
         raise ArithmeticError("Scaled sparse generator contains nonfinite values")
     trace = float(a.diagonal().sum())
     if not np.isfinite(trace):
         raise ArithmeticError("Scaled sparse generator trace overflowed")
-    result = expm_multiply(a, vector, traceA=trace)
-    if not np.isfinite(result).all() or np.any(result < 0):
-        raise ArithmeticError("Sparse CTMC action produced nonfinite or negative values")
-    positive = result > 0
-    if not positive.any() and vector.any():
-        raise ArithmeticError("Sparse CTMC action collapsed a nonzero likelihood vector")
-    out = np.full(result.shape, -np.inf)
-    out[positive] = np.log(result[positive]) + shift
-    return out
+    output = np.full(values.shape, -np.inf)
+    if fast_columns.size:
+        result = expm_multiply(a, vector[:, fast_columns], traceA=trace)
+        if not np.isfinite(result).all() or np.any(result < 0):
+            raise ArithmeticError("Sparse CTMC action produced nonfinite or negative values")
+        for index, column in enumerate(fast_columns):
+            positive = result[:, index] > 0
+            reachable = _support_after_edge(
+                q, length, np.isfinite(normalized[:, column]))
+            if np.any(reachable & ~positive):
+                fallback[column] = True
+                continue
+            output[positive, column] = (
+                np.log(result[positive, index]) + shifts[column])
+    fallback_columns = np.flatnonzero(fallback)
+    if fallback_columns.size:
+        output[:, fallback_columns] = log_uniformization_action(
+            q, length, values[:, fallback_columns], _support_after_edge)
+    return output[:, 0] if log_values.ndim == 1 else output
 
 
 def _support_after_edge(q, length, child_support):

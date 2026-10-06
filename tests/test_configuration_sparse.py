@@ -155,7 +155,7 @@ class SparseLikelihoodTests(unittest.TestCase):
                                 counts=False, backend="sparse")
         self.assertEqual(result["log_likelihood"], -np.inf)
 
-    def test_finite_child_support_underflow_is_an_arithmetic_error(self):
+    def test_finite_child_support_underflow_retains_analytic_likelihood(self):
         space = make_space()
         tree = SpeciesTree([
             {"node_id": "r", "parent_id": "", "label": "r"},
@@ -167,16 +167,16 @@ class SparseLikelihoodTests(unittest.TestCase):
         tiny = 1e-308
         tips = {"A": np.array([tiny, 1.]), "B": np.array([tiny, 1.]),
                 "C": np.ones(2)}
-        with self.assertRaises(ArithmeticError):
-            evaluate_model(space, tree, tips, model(), posterior=False,
-                           counts=False, backend="sparse")
+        value = evaluate_model(space, tree, tips, model(), posterior=False,
+                               counts=False, backend="sparse")["log_likelihood"]
+        self.assertAlmostEqual(value, -np.log(2.), places=11)
 
     def test_final_negative_infinity_with_graph_feasible_support_is_numeric_error(self):
         tree = make_tree()
         q = csr_matrix([[-1., 1.], [0., 0.]])
         tips = {"A": np.array([0., 1.]), "B": np.ones(2)}
-        with patch("intraphy.inference.configuration_sparse.expm_multiply",
-                   return_value=np.array([0., 1.])):
+        with patch("intraphy.inference.configuration_sparse.log_action",
+                   return_value=np.array([-np.inf, 0.])):
             with self.assertRaises(ArithmeticError):
                 likelihood_only(tree, tips, {"a": q, "b": q},
                                 {"a": .2, "b": .3}, np.array([1., 0.]))
