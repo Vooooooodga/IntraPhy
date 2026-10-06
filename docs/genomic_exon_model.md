@@ -163,19 +163,31 @@ cover only material tracts declared in the local catalogue, not all DNA or
 coding sequence.
 
 Likelihood fitting uses the sparse edit generator and exponential-action
-pruning. By default, posterior inference also uses exponential actions and
-contracts states that share the same observable exon geometry and declared
-DNA-presence pattern. It retains state-order node marginals and reports
-observable joint endpoint modes and exon-count pair marginals without storing
-a full state-pair endpoint matrix. Count-pair probabilities marginalize all
-states and material-origin scenarios under the same fitted CTMC; they describe
-parent/child endpoint counts rather than transition histories. Mode rows use
-absolute and relative tie tolerances of `1e-12`; these values apply to both
-compact and dense branch summaries and are recorded in
-`branch_exon_changes.tsv`. Compact rows also record the number of parent
-groups examined by the modal search; dense rows record the full observable
-group count. Complete state catalogues are evaluated under the declared root,
-origin, and transition models.
+pruning with an exact tree recursion over subsets of declared DNA material
+tracts. Each subset table retains a full state likelihood vector, and disjoint
+subsets combine first-introduction opportunities across branches. A subset
+records the assigned origin opportunity; it does not require an insertion to
+occur on that branch. At the root, each implied root-material mask uses its own
+uniform prior over valid exon geometries and the declared root and branch
+opportunity weights. The recursion includes the complete state catalogue and
+origin assignment sum without truncation. Log-space summation can differ from
+scenario-by-scenario evaluation at roundoff scale; a numerically collapsed
+contribution from a reachable state raises an error.
+
+Dense and compact posterior inference continue to evaluate joint origin
+scenarios exhaustively and can remain costly as the number of material tracts
+grows. The compact evaluator also contracts states that share the same
+observable exon geometry and declared DNA-presence pattern. It retains
+state-order node marginals and reports observable joint endpoint modes and
+exon-count pair marginals without storing a full state-pair endpoint matrix.
+Count-pair probabilities marginalize all states and material-origin scenarios
+under the same fitted CTMC; they describe parent/child endpoint counts rather
+than transition histories. Mode rows use absolute and relative tie tolerances
+of `1e-12`; these values apply to both compact and dense branch summaries and
+are recorded in `branch_exon_changes.tsv`. Compact rows also record the number
+of parent groups examined by the modal search; dense rows record the full
+observable group count. Complete state catalogues are evaluated under the
+declared root, origin, and transition models.
 
 `--expected-edits` requests transition-count expectations and uses the dense
 posterior evaluator for that calculation. Its state-pair endpoint and

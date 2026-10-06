@@ -9,7 +9,7 @@ from ..structure.space import StateSpace
 from ..structure.origins import origin_scenarios, permitted
 from ..structure.tree_context import canonical_tree
 from .configuration_ctmc import likelihood, transition_matrix, expected_count, probability_any_change
-from .configuration_sparse import likelihood_only, sparse_generator
+from .configuration_origin_dp import likelihood_origin_dp
 
 
 @dataclass(frozen=True)
@@ -82,22 +82,20 @@ def evaluate_model(space: StateSpace, tree, tips, model: RateModel, *,
         **({"expected_edits": 0., **{f"expected_{k}": 0. for k in EDIT_KINDS}} if counts else {})}
         for e in tree.edges()} if posterior else {}
     origin_weights = []
+    def base_output(log_likelihood):
+        return {"log_likelihood": log_likelihood, "nodes": {}, "branches": [], "origins": [],
+                "root_prior": "uniform_valid_exon_geometries_given_origin_opportunities",
+                "origin_prior": "declared_root_weight_and_unit_branch_opportunities_on_canonical_tree",
+                "origin_root_weight": model.origin_root_weight,
+                "tree_normalization": context.diagnostics(),
+                "kernel_cache": {"hits": cache.hits, "misses": cache.misses,
+                                 "retained_bytes": cache.bytes, "limit_bytes": cache.maximum_bytes}}
+    if backend == "sparse":
+        total = likelihood_origin_dp(space, tree, tips, model, lengths, cache,
+                                     max_origins=max_origins,
+                                     sparse_templates=sparse_templates)
+        return base_output(total)
     for origins, root, log_prior in origin_scenarios(space, tree, max_origins, tips=tips, root_weight=model.origin_root_weight):
-        if backend == "sparse":
-            generators = {}
-            for _, child in tree.edges():
-                allowed = tuple(sorted(material for material, origin in origins.items()
-                                        if origin == child))
-                signature = (allowed, child in model.foreground)
-                generators[child] = cache.get_or_compute(
-                    signature, lambda child=child: (
-                        sparse_templates.generator(space, model, origins, child)
-                        if sparse_templates is not None else
-                        sparse_generator(space, model, origins, child)))
-            conditional = likelihood_only(tree, tips, generators, lengths,
-                                          root.astype(float)/root.sum())
-            total = float(np.logaddexp(total, conditional + log_prior))
-            continue
         matrices, generators, marked = {}, {}, {}
         for _, child in tree.edges():
             signature = (tuple(k for k, v in origins.items() if v == child), lengths[child], child in model.foreground)
@@ -136,13 +134,7 @@ def evaluate_model(space: StateSpace, tree, tips, model: RateModel, *,
                     if b.any():
                         values[f"expected_{kind}"] += new_weight*expected_count(
                             generators[child], matrices[child], endpoint, lengths[child], b)
-    out = {"log_likelihood": total, "nodes": {}, "branches": [], "origins": [],
-           "root_prior": "uniform_valid_exon_geometries_given_origin_opportunities",
-           "origin_prior": "declared_root_weight_and_unit_branch_opportunities_on_canonical_tree",
-           "origin_root_weight": model.origin_root_weight,
-           "tree_normalization": context.diagnostics(),
-           "kernel_cache": {"hits": cache.hits, "misses": cache.misses,
-                            "retained_bytes": cache.bytes, "limit_bytes": cache.maximum_bytes}}
+    out = base_output(total)
     if not posterior or not np.isfinite(total):
         return out
     out["origins"] = [{"origins": origins, "posterior_weight": float(np.exp(ll-total))}
