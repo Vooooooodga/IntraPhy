@@ -12,13 +12,13 @@ def main():
     distribution=importlib.metadata.distribution('intraphy')
     entries=[entry.name for entry in distribution.entry_points if entry.group=='console_scripts']
     assert entries==['intraphy'], entries
-    assert intraphy.__version__ == '0.19.1', intraphy.__version__
-    assert distribution.version == intraphy.__version__, distribution.version
+    assert intraphy.__version__ == distribution.version, (intraphy.__version__, distribution.version)
     previous='insi'+'phy'
     assert importlib.util.find_spec(previous) is None, 'A separately installed old package remains in the environment'
     assert shutil.which(previous) is None, 'A separately installed old executable remains on PATH'
     for command in ([sys.executable,'-I','-m','intraphy','--version'],['intraphy','--version']):
-        subprocess.run(command,check=True)
+        completed=subprocess.run(command,check=True,capture_output=True,text=True)
+        assert completed.stdout.strip() == f'intraphy {distribution.version}', completed.stdout
     print('Installed namespace and entry points: passed')
 
 if __name__=='__main__':

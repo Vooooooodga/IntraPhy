@@ -58,7 +58,8 @@ def main():
             raw = write_exon_example(out/scenario/"raw", scenario)
             # Retain truth OUTSIDE the input, never as an analysis parameter.
             (raw/"truth.json").replace(out/scenario/"evaluation_truth.json")
-            command = build_parser().parse_args(["analyze", "--fasta", str(raw), "--gff", str(raw),
+            command = build_parser().parse_args(["analyze", "--model", "exon-parsimony",
+                "--fasta", str(raw), "--gff", str(raw),
                 "--species-tree", str(raw/"species_tree.nwk"), "--output-dir", str(out/scenario/"result")])
             command._input_selection = resolve_inputs(command)
             rows = dispatch_analyze(command)
@@ -70,7 +71,8 @@ def main():
         item["seconds"] = round(time.monotonic()-begin, 3)
         results.append(item)
         print(json.dumps(item), flush=True)
-        write_json(out/"validation.json", {"cases": results, "scope": "synthetic_raw_input_contracts",
+        write_json(out/"validation.json", {"model_contract": "exon-parsimony (explicit legacy regression)",
+            "cases": results, "scope": "synthetic_raw_input_contracts",
             "biological_accuracy_benchmark": False, "statistical_calibration": False})
     return int(any(r["status"] != "passed" for r in results))
 

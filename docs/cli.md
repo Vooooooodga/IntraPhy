@@ -50,7 +50,16 @@ listed by multiple transcripts are deduplicated. Distinct overlapping
 annotations remain separately represented; conflicting evidence can leave a
 local observation unknown. Missing annotations are unknown. This includes
 annotated terminal and UTR exons; an exon end alone does not imply splice
-function.
+function. A retained homologous candidate interval may be recorded as
+annotation-conditioned non-exonic only when the provided whole-locus transcript
+paths place it between adjacent annotated exons, no provided exon overlaps it,
+the candidate DNA and both flanking sequence anchors are supported, and no
+relevant partial-boundary or alignment uncertainty remains. This describes only
+the supplied annotation paths and does not claim exhaustive coverage of
+biological transcripts. DNA presence alone and an unannotated interval remain
+insufficient to call an exon or infer RNA use. Unmarked exon omissions cannot
+be distinguished from genuine non-exonic annotation from these inputs;
+annotation-quality sensitivity should be assessed.
 
 The default fit estimates one nonnegative scalar rate per family, shared across
 all elementary edit kinds and linked local units. Linked units contribute a

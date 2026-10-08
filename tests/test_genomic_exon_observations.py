@@ -262,8 +262,17 @@ class GenomicExonDefaultEndToEnd(unittest.TestCase):
                                  "constrained_elementary_edit_graph_conditional_composite_likelihood")
                 self.assertEqual(diagnostics["ascertainment_correction"], "not_applied")
                 if scenario == "annotation_dropout":
-                    self.assertTrue(any(o.kind in {"partial", "unknown"} for c in catalogues
-                                        for o in c.observations if o.species == "Species_D"))
+                    conditioned = [(c, o) for c in catalogues for o in c.observations
+                                   if o.species == "Species_D"
+                                   and "annotation_supported_nonexonic_interval" in o.reasons]
+                    self.assertTrue(conditioned)
+                    for catalogue, observation in conditioned:
+                        self.assertEqual(observation.kind, "observed")
+                        self.assertTrue(catalogue.spans)
+                        self.assertTrue(all(span not in observation.configurations[0].exons
+                                            for span in catalogue.spans))
+                    # Inputs do not distinguish genuine non-exonic structure from an unmarked
+                    # omitted exon annotation; truth is deliberately not supplied to inference.
 
 
 if __name__ == "__main__":

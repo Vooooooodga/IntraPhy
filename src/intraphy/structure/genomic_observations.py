@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 from .alignment import gap_supported, paired_support
+from .annotation_context import annotation_supported_nonexonic_interval
 from .types import ExonConfiguration, ExonSpan, ObservationEvidence
 
 
@@ -117,14 +118,27 @@ def genomic_span_observation(*, species, proto, locus, ids, spans, instances, al
                 (material_covers(candidate) or gap_supported(alignment.rows, species, a, b,
                                                               anchor_bases, anchor_identity)))
 
+    def annotation_nonexonic(candidate, source_id, source_species):
+        return annotation_supported_nonexonic_interval(species=species,
+            source_species=source_species, candidate=candidate, source_id=source_id, locus=locus,
+            alignment=alignment, start=start, anchor_bases=anchor_bases,
+            minimum_identity=minimum_identity, anchor_identity=anchor_identity)
+
     if not positive:
         reasons.add("annotation_missing_or_no_physical_exon_spans")
         absent = [qualified_absence(spans[eid], instances[eid].species) for eid in ids]
+        nonexonic = [annotation_nonexonic(spans[eid], eid, instances[eid].species) for eid in ids]
         unlocalized_partial = (locus.partial and
                                not getattr(locus, "partial_location_known", False))
-        if absent and all(absent) and not unlocalized_partial and not unknown:
+        if (absent and all(a or n for a, n in zip(absent, nonexonic))
+                and not unlocalized_partial and not unknown):
+            observation_reasons = set()
+            if all(absent):
+                observation_reasons.add("all_candidate_spans_qualified_absent")
+            if any(nonexonic):
+                observation_reasons.add("annotation_supported_nonexonic_interval")
             return ObservationEvidence(species, (ExonConfiguration((), material),), "observed",
-                ("all_candidate_spans_qualified_absent",), (), material_presence)
+                tuple(sorted(observation_reasons)), (), material_presence)
         reasons.add("genomic_absence_unqualified")
         return ObservationEvidence(species, (), "unknown", tuple(sorted(reasons)), (),
                                    material_presence, tuple(sorted(set(unknown))))
@@ -144,6 +158,9 @@ def genomic_span_observation(*, species, proto, locus, ids, spans, instances, al
             continue
         source = instances[eid].species
         if qualified_absence(candidate, source):
+            continue
+        if annotation_nonexonic(candidate, eid, source):
+            reasons.add("annotation_supported_nonexonic_interval")
             continue
         a, b = candidate.start + start, candidate.end + start
         paired, identity = paired_support(row, alignment.rows[source], a, b)

@@ -6,6 +6,17 @@ concurrency:
   group: tests-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  source-layout:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Check source layout and active-language policy
+        run: python tools/check_source_layout.py
+
   unittest:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -13,6 +24,7 @@ jobs:
       fail-fast: false
       matrix:
         python: ['3.10', '3.13']
+        suite: [unit, legacy, current, package]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -27,28 +39,38 @@ jobs:
           minimap2 --version | tee -a validation/current/tools.txt
       - name: Install package and build tools
         run: python -m pip install -c requirements-ci.txt . build cairosvg
-      - name: Check source and installed namespace
+      - name: Check installed namespace
+        if: matrix.suite == 'package'
         run: |
-          python tools/check_source_layout.py
           python -I tools/verify_namespace.py
           intraphy inspect-aligners
       - name: Unit and raw-input integration tests
+        if: matrix.suite == 'unit'
         run: |
           set -o pipefail
           python -m unittest discover -s tests -v 2>&1 | tee validation/current/tests.log
-      - name: Scientific regression cases
+      - name: Historical compatibility regressions
+        if: matrix.suite == 'legacy'
         run: |
           python tools/validate_v19.py --output-dir validation/current/v19-raw
           python tools/validate_v0191.py --output-dir validation/current/v0191-audit
-          python tools/render_method_figures.py --output-dir validation/current/current-guide --png
+      - name: Current exon-structure CLI regression
+        if: matrix.suite == 'current'
+        run: python tools/validate_exon_structure.py --output-dir validation/current/exon-structure
       - name: Build distributions
+        if: matrix.suite == 'package'
         run: python -m build
       - name: Isolated wheel smoke test
+        if: matrix.suite == 'package'
         run: |
           python -m venv /tmp/intraphy-wheel
           /tmp/intraphy-wheel/bin/python -m pip install -c requirements-ci.txt dist/*.whl
-          PATH=/tmp/intraphy-wheel/bin:$PATH /tmp/intraphy-wheel/bin/python -I tools/verify_namespace.py
+          export PATH=/tmp/intraphy-wheel/bin:$PATH
+          /tmp/intraphy-wheel/bin/python -I tools/verify_namespace.py
           /tmp/intraphy-wheel/bin/python tools/smoke_validate.py --output-dir validation/current/wheel-smoke
+      - name: Render method figures
+        if: matrix.suite == 'package'
+        run: python tools/render_method_figures.py --output-dir validation/current/current-guide --png
       - name: Archive source and native executables for reproducibility
         if: always()
         run: |
@@ -59,7 +81,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: validation-python-${{ matrix.python }}
+          name: validation-${{ matrix.suite }}-python-${{ matrix.python }}
           path: |
             validation/current
             dist

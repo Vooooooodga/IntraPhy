@@ -13,7 +13,7 @@ class LargeTsvFields(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             # Includes a tab, embedded newline, quote, and multibyte Unicode.
-            evidence = ('证据\t"line one\nline two" λ ' * 9000)
+            evidence = ('\u8bc1\u636e\t"line one\nline two" \u03bb ' * 9000)
             self.assertGreater(len(evidence), 131072)
             expected = [{"id": "segment-1", "evidence": evidence}]
 
@@ -29,7 +29,7 @@ class LargeTsvFields(unittest.TestCase):
     def test_interleaved_readers_keep_large_field_limit(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            evidence = "长字段λ" * 50000
+            evidence = "\u957f\u5b57\u6bb5\u03bb" * 50000
             paths = [root / "first.tsv", root / "second.tsv"]
             for index, path in enumerate(paths):
                 write_tsv(path, [{"id": f"{index}-1", "evidence": evidence},

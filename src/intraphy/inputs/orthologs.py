@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from Bio import SeqIO
 
-from ..orthofinder import _build_gff_locus_index, _member_token_groups
+from .orthofinder_ids import build_gff_locus_index, member_token_groups
 from ..storage.tabular import open_text
 from .resources import SpeciesFiles
 
@@ -62,11 +62,11 @@ def targets_from_fastas(resources: tuple[SpeciesFiles, ...],
                for family, path in families.items() for header in read_headers(path)]
     hits: dict[int, set[tuple[str, str]]] = defaultdict(set)
     for resource in resources:
-        exact, _, _ = _build_gff_locus_index(resource.gff)
+        exact, _, _ = build_gff_locus_index(resource.gff)
         for index, (_, _, _, declared_species, header) in enumerate(records):
             if declared_species and declared_species != resource.species:
                 continue
-            primary, metadata = _member_token_groups(header)
+            primary, metadata = member_token_groups(header)
             for tokens in (primary, metadata):
                 matched = set().union(*(exact.get(token, set()) for token in tokens))
                 if matched:

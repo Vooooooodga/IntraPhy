@@ -26,7 +26,8 @@ def main():
             raw=write_audit_example(out/name/"raw",name)
             (raw/"truth.json").replace(out/name/"evaluation_truth.json")
             result=out/name/"result"
-            cmd=build_parser().parse_args(["analyze","--fasta",str(raw),"--gff",str(raw),
+            cmd=build_parser().parse_args(["analyze","--model","exon-parsimony",
+                "--fasta",str(raw),"--gff",str(raw),
                 "--species-tree",str(raw/"species_tree.nwk"),"--output-dir",str(result)])
             cmd._input_selection=resolve_inputs(cmd);summary=dispatch_analyze(cmd)
             details=json.loads((result/"exon_history.json").read_text())
@@ -34,7 +35,8 @@ def main():
         except (Exception,SystemExit) as exc:
             item={"scenario":name,"status":"failed","error_type":type(exc).__name__,"error":str(exc)}
         item["seconds"]=round(time.monotonic()-start,3);results.append(item);print(json.dumps(item),flush=True)
-        write_json(out/"validation.json",{"version":"0.19.1","cases":results,
+        write_json(out/"validation.json",{"version":"0.19.1",
+            "model_contract":"exon-parsimony (explicit legacy regression)","cases":results,
             "scope":"synthetic_raw_audit_regressions_not_biological_accuracy_or_statistical_calibration"})
     return int(any(r["status"]!="passed" for r in results))
 
