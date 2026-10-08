@@ -73,6 +73,15 @@ exon spans. Annotation discovery is not corrected for ascertainment. Equal
 rates are a constrained baseline for the declared edit graph; results do not
 provide a significance test for exon evolution.
 
+For a declared foreground branch set, `compare-exon-foreground` evaluates a
+shared foreground rate multiplier while profiling one background rate per gene
+family, using the existing genomic-exon likelihood and a fixed catalogue/tree
+roster across the null and alternative. It reports conditional composite
+likelihood and fit identifiability; `p_value` is null and no
+confidence interval or RNA transcript-usage estimate is produced. See the
+[CLI guide](docs/cli.md) for canonical foreground TSV, roster provenance,
+output contracts, and inference limits.
+
 ![Method overview of genomic correspondence, physical exon-span observations, default CTMC inference, and endpoint-based branch summaries.](docs/figures/publication/method_scheme.svg)
 
 See [method schematics](docs/method_schematics.md) for this figure's caption

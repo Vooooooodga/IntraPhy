@@ -28,6 +28,15 @@ def _dispatch(args):
         from .commands.genomic import dispatch_prepare_evidence
         dispatch_prepare_evidence(args)
         return
+    if args.command == "compare-exon-foreground":
+        from .inference.genomic_exon_comparison_run import compare_genomic_exon_foreground
+        compare_genomic_exon_foreground(
+            args.input_dir, args.exon_configurations, args.foreground_branches,
+            args.output_dir, branch_length_mode=args.branch_length_mode,
+            max_states=args.max_states, max_origins=args.max_origin_scenarios,
+            profile_multipliers=args.profile_multipliers or (), threads=args.threads,
+        )
+        return
     if args.command in {"locus-statistics", "prepare-locus-evidence"}:
         from .commands.locus_statistics import (
             dispatch_locus_statistics, dispatch_prepare_locus_evidence,

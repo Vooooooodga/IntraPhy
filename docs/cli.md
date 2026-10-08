@@ -151,6 +151,57 @@ identity and anchor thresholds still control catalogue reconstruction;
 alignment thread and timeout settings do not rerun the saved tools. The result's
 `exon_evidence_policy.json` records the evidence source and original commands.
 
+### Shared foreground comparison
+
+Use `compare-exon-foreground` to compare the native genomic-exon likelihood
+with a shared foreground rate multiplier and one profiled background rate per
+family. Inputs are an existing prepared case and one or more JSONL catalogues;
+each catalogue must use `observation_unit="genomic_exon_spans"`. The prepared
+`species_tree.tsv` and the same frozen family/unit roster are used for both the
+null (`rho=1`) and alternative (profiled shared `rho`) fits.
+
+The foreground TSV follows the existing branch-table convention. Its header
+may contain `branch_scope` with entries written as `parent_label->child_label`,
+or paired `parent_node`/`child_node` (also accepted as `parent_id`/`child_id`)
+columns containing canonical node IDs. Every selected edge must exist in the
+tree after canonicalization without foreground flags. Unary subdivisions
+collapsed by that normalization do not create separate foreground
+opportunities. Duplicate selections, noncanonical edges, all-foreground trees,
+and zero exposure in either branch class are rejected.
+
+```bash
+intraphy compare-exon-foreground --input-dir prepared_case \
+  --exon-configurations gene_a.jsonl gene_b.jsonl \
+  --foreground-branches foreground_branches.tsv \
+  --output-dir foreground_comparison \
+  --profile-multipliers 0 0.5 1 2
+```
+
+`--max-states` and `--max-origin-scenarios` are optional stopping limits.
+`--threads` controls local-unit likelihood evaluation within each family;
+families are evaluated serially. Profile multipliers must be finite and
+nonnegative; zero and one are included even when omitted. Outputs include
+`exon_foreground_comparison.json`, `foreground_profile.tsv`,
+`foreground_family_fits.tsv`, `foreground_unit_diagnostics.tsv`, normalized
+`species_tree.tsv`, the combined `exon_configurations.jsonl`,
+`foreground_branches.tsv` with source-row provenance, and `run_result.json`.
+The JSON retains requested/eligible/excluded family-unit rosters, discovery
+scope, normalized tree, and input branch mapping. The result record identifies
+model `exon-structure-ctmc` and scope `genomic-exon-foreground-comparison`.
+
+The comparison is conditional composite-likelihood inference over the declared
+catalogue and edit graph. The JSON `p_value` is null; this command does not
+provide calibrated significance tests or confidence intervals. A single-family
+foreground multiplier may be unidentifiable, which is reported in its fit
+status. Annotation ascertainment is not corrected, and the analysis does not
+model RNA transcript usage or establish historical molecular events.
+For gene family `g`, eligible elementary-edit rates are `mu_g` on background
+edges and `rho * mu_g` on foreground edges. Rates are per eligible opportunity
+per supplied branch-length unit, or per edge with `--branch-length-mode unit`;
+the root-structure and material-origin priors, observations, and state space
+remain fixed across the comparison. `rho` describes relative structural-change
+rate and does not test selection.
+
 ## Exon endpoint calibration
 
 ```bash

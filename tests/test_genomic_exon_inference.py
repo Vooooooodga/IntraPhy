@@ -9,7 +9,8 @@ from unittest.mock import patch
 import numpy as np
 
 from intraphy.inference.configuration_model import RateModel, evaluate_model, generator
-from intraphy.inference.genomic_exon_rates import fit_family_rate, fixed_family_fit
+from intraphy.inference.genomic_exon_rates import (
+    FamilyRateLikelihood, fit_family_rate, fixed_family_fit)
 from intraphy.inference.genomic_exon_run import infer_genomic_exons
 from intraphy.structure.edits import EDIT_KINDS
 from intraphy.structure.space import enumerate_space
@@ -29,6 +30,18 @@ class _Tree:
         return self.length
 
 
+class _ForegroundTree:
+    def __init__(self):
+        self.lengths = {"fg": .25, "bg": .75}
+
+    def edges(self):
+        yield "root", "fg"
+        yield "root", "bg"
+
+    def branch_length(self, child):
+        return self.lengths[child]
+
+
 def _unit(length, pattern):
     return {"space": object(), "tree": _Tree(length), "tips": {"pattern": pattern}}
 
@@ -45,6 +58,16 @@ def _analytic_log_likelihood(space, tree, tips, model, **kwargs):
     if pattern == "finite":
         return {"log_likelihood": -(exposure-2.)**2}
     raise AssertionError(pattern)
+
+
+def _analytic_foreground_log_likelihood(space, tree, tips, model, **kwargs):
+    base_rate = model.rates[EDIT_KINDS[0]]
+    effective_exposure = sum(
+        tree.branch_length(child)
+        * (model.foreground_multiplier if child in model.foreground else 1.)
+        for _parent, child in tree.edges())
+    z = base_rate * effective_exposure
+    return {"log_likelihood": -(z - 2.) ** 2}
 
 
 class GenomicExonFitTests(unittest.TestCase):
@@ -76,7 +99,7 @@ class GenomicExonFitTests(unittest.TestCase):
                           side_effect=AssertionError("CTMC called")), \
                     patch("intraphy.inference.genomic_exon_family.evaluate_compact",
                           side_effect=AssertionError("compact CTMC called")), \
-                    patch("intraphy.inference.genomic_exon_run.state_rows",
+                    patch("intraphy.inference.genomic_exon_inputs.state_rows",
                           side_effect=AssertionError("state rows materialized")), \
                     patch("intraphy.inference.genomic_exon_family.state_rows",
                           side_effect=AssertionError("state rows materialized")):
@@ -139,6 +162,43 @@ class GenomicExonFitTests(unittest.TestCase):
             first, second = fit_family_rate(units_a), fit_family_rate(units_b)
         self.assertAlmostEqual(first["log_likelihood"], second["log_likelihood"], places=5)
         self.assertAlmostEqual(first["mu"], 4*second["mu"], delta=.02)
+
+    def test_foreground_exposure_reparameterization_preserves_analytic_optimum(self):
+        tree = _ForegroundTree()
+        unit = {"space": object(), "tree": tree, "tips": {"pattern": "constant"}}
+        background_length = tree.branch_length("bg")
+        foreground_length = tree.branch_length("fg")
+        base_exposure = background_length + foreground_length
+        foreground = frozenset({"fg"})
+        with patch("intraphy.inference.genomic_exon_rates.evaluate_model",
+                   _analytic_foreground_log_likelihood):
+            workspace = FamilyRateLikelihood([unit])
+            self.assertAlmostEqual(workspace.exposure, base_exposure)
+            for rho in (0., .5, 1., 100.):
+                effective_exposure = background_length + rho * foreground_length
+                expected_mu = 2. / effective_exposure
+                fit = fit_family_rate([unit], foreground=foreground,
+                                      foreground_multiplier=rho,
+                                      likelihood_workspace=workspace)
+                self.assertEqual(fit["status"], "estimated_conditional_composite_rate")
+                self.assertAlmostEqual(fit["rate_exposure"], effective_exposure)
+                self.assertAlmostEqual(fit["dimensionless_rate_x"], 2., delta=2e-5)
+                self.assertAlmostEqual(fit["mu"], expected_mu, delta=2e-5)
+                self.assertAlmostEqual(fit["log_likelihood"], 0., delta=1e-9)
+                old_workspace_x = fit["mu"] * base_exposure
+                self.assertAlmostEqual(old_workspace_x, expected_mu * base_exposure,
+                                       delta=2e-5)
+                self.assertAlmostEqual(
+                    workspace.log_likelihood(old_workspace_x, foreground, rho),
+                    0., delta=1e-9)
+
+            default_fit = fit_family_rate([unit], likelihood_workspace=workspace)
+            rho_one_fit = fit_family_rate([unit], foreground=foreground,
+                foreground_multiplier=1., likelihood_workspace=workspace)
+        self.assertEqual(default_fit["status"], rho_one_fit["status"])
+        self.assertAlmostEqual(default_fit["mu"], rho_one_fit["mu"], delta=1e-10)
+        self.assertAlmostEqual(default_fit["log_likelihood"],
+                               rho_one_fit["log_likelihood"], delta=1e-10)
 
     def test_fixed_family_fit_uses_existing_configuration_ctmc_kernel(self):
         catalogue = Catalogue("f", "u", 4, (ExonSpan(0, 2),), (),

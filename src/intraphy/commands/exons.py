@@ -121,6 +121,25 @@ def add_exon_commands(sub):
     add_configuration_options(analyze)
     add_dna_observation_options(analyze)
     add_intron_observation_options(analyze)
+    comparison = sub.add_parser(
+        "compare-exon-foreground",
+        help="Compare a shared foreground rate multiplier across genomic exon catalogues.",
+    )
+    comparison.add_argument("--input-dir", required=True,
+                            help="Prepared inputs containing species_tree.tsv.")
+    comparison.add_argument("--exon-configurations", nargs="+", required=True,
+                            help="One or more JSONL genomic_exon_spans catalogues.")
+    comparison.add_argument("--foreground-branches", required=True,
+                            help="TSV selecting canonical tree branches; see docs/cli.md.")
+    comparison.add_argument("--output-dir", required=True)
+    comparison.add_argument("--threads", type=int, default=1)
+    comparison.add_argument("--branch-length-mode", choices=("supplied", "unit"), default="supplied")
+    comparison.add_argument("--max-states", type=int, default=None,
+                            help="Optional finite candidate-state limit; exceeding it stops inference.")
+    comparison.add_argument("--max-origin-scenarios", type=int, default=None,
+                            help="Optional origin-scenario limit; exceeding it stops inference.")
+    comparison.add_argument("--profile-multipliers", nargs="+", type=float, default=None,
+                            help="Optional nonnegative rho values; 0 and 1 are always included.")
     cesar = sub.add_parser("realign-exons", help="Optional CESAR2 coding gene-mode prediction, separate from observations.")
     cesar.add_argument("--input-dir", required=True)
     cesar.add_argument("--output-dir", required=True)

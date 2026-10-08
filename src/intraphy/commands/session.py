@@ -10,7 +10,8 @@ from .environment import environment_report
 from .preflight import preflight
 
 GUARDED_COMMANDS = {"build-case", "run", "infer-phylogeny", "visualize", "import-orthofinder",
-                    "extract-loci", "normalize-annotation", "explain", "analyze", "fit-exon-rates", "realign-exons"}
+                    "extract-loci", "normalize-annotation", "explain", "analyze", "fit-exon-rates", "realign-exons",
+                    "compare-exon-foreground"}
 GUARDED_COMMANDS.update({"infer-exon-repertoires", "fit-exon-repertoire-rates"})
 GUARDED_COMMANDS.update({"locus-statistics", "prepare-locus-evidence", "prepare-genomic-evidence",
                          "calibrate-exons"})
@@ -22,6 +23,9 @@ OWNERS = {"execution.json", "run_result.json", "case_build_report.tsv", "case_pr
           "intron_fit.json", "intron_history.json"}
 OWNERS.update({"exon_structure_fit.json", "exon_history.json", "exon_configurations.jsonl"})
 OWNERS.add("calibration_metadata.json")
+OWNERS.update({"exon_foreground_comparison.json", "foreground_profile.tsv",
+               "foreground_family_fits.tsv", "foreground_unit_diagnostics.tsv",
+               "foreground_branches.tsv", "state_space_diagnostics.jsonl"})
 
 
 def _write_json(path, data):
@@ -88,7 +92,9 @@ def command_session(args):
             print(f"IntraPhy: {args.command} -> {directory}", file=sys.stderr)
         if getattr(args, 'analysis_range', 'all') != 'all':
             logger.warning("Coverage subset requested; the threshold has no calibrated biological interpretation")
-        if getattr(args, 'model', 'parsimony') == 'exon-structure-ctmc':
+        if getattr(args, 'command', None) == 'compare-exon-foreground':
+            logger.warning("Foreground comparison is conditional composite-likelihood inference; its p-value and confidence-interval calibration are not available")
+        elif getattr(args, 'model', 'parsimony') == 'exon-structure-ctmc':
             logger.warning("Exon-structure estimates are conditional on the mapped finite catalogue and use a composite likelihood for linked local units")
         elif getattr(args, 'model', 'parsimony') in {'er-ard', 'foreground', 'exon-ctmc', 'dna-presence-ctmc', 'intron-position-ctmc'}:
             logger.warning("CTMC results are conditional; finite-sample LRT calibration remains unassessed")

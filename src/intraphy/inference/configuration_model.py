@@ -29,8 +29,8 @@ class RateModel:
             raise ValueError("Edit rates must be finite and nonnegative")
         if not np.isfinite(self.scale) or self.scale <= 0:
             raise ValueError("Rate scale must be finite and positive")
-        if not np.isfinite(self.foreground_multiplier) or self.foreground_multiplier <= 0:
-            raise ValueError("Foreground multiplier must be finite and positive")
+        if not np.isfinite(self.foreground_multiplier) or self.foreground_multiplier < 0:
+            raise ValueError("Foreground multiplier must be finite and nonnegative")
 
 
 def generator(space: StateSpace, model: RateModel, origins: dict[str, str], child: str, *, include_marks=True):

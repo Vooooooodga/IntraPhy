@@ -42,6 +42,10 @@ def required_tools(args):
 
 
 def validate_arguments(args):
+    if getattr(args, "command", None) == "compare-exon-foreground":
+        from .genomic_exon_comparison import validate_comparison_arguments
+        validate_comparison_arguments(args)
+        return
     if getattr(args, "command", None) == "analyze" and getattr(args, "model", None) is None:
         args.model = "exon-locus-ctmc" if getattr(args, "locus_model", None) else "exon-structure-ctmc"
     if getattr(args, "command", None) == "analyze":
@@ -217,6 +221,10 @@ def validate_arguments(args):
 
 
 def validate_input_paths(args):
+    if getattr(args, "command", None) == "compare-exon-foreground":
+        from .genomic_exon_comparison import validate_comparison_inputs
+        validate_comparison_inputs(args)
+        return
     if args.command == "prepare-genomic-evidence":
         directory = Path(args.input_dir)
         if not directory.is_dir():

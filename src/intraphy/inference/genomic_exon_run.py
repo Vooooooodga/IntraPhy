@@ -2,87 +2,26 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import asdict
-import json
 from pathlib import Path
 
 import numpy as np
 
 from ..run_result import RunResult
 from ..storage.tabular import write_tsv
-from ..structure.observations import observation_scenarios
 from ..structure.prepare import prepare_configurations
-from ..structure.serialization import json_safe, read_catalogues, write_catalogues
-from ..structure.space import enumerate_space
+from ..structure.serialization import read_catalogues, write_catalogues
 from ..structure.tree_context import canonical_tree, tree_rows as normalized_rows
 from ..structure.validation import validate_collection
 from ..inputs.species_tree import read_species_tree_rows, select_species_tree_rows
 from ..topology import SpeciesTree
 from .configuration_model import RateModel
 from .genomic_exon_family import run_family_tasks
-from .genomic_exon_output import assemble_rows, state_rows, write_outputs
+from .genomic_exon_output import assemble_rows, write_outputs
 from .genomic_exon_branches import branch_change_rows
+from .genomic_exon_inputs import _diagnose_catalogue, _write_state_space_progress
 
 
 MODEL = "exon-structure-ctmc"
-
-
-def _write_state_space_progress(handle, record):
-    handle.write(json.dumps(json_safe(record), sort_keys=True, separators=(",", ":")) + "\n")
-    handle.flush()
-
-
-def _diagnose_catalogue(catalogue, taxa, tree, max_states, state_space_only, progress):
-    _write_state_space_progress(progress, {"family_id": catalogue.family,
-        "unit_id": catalogue.unit,
-        "stage": "enumeration_started" if catalogue.status == "qualified" else "unit_started"})
-    diag = {"family_id": catalogue.family, "unit_id": catalogue.unit,
-        "catalogue_status": catalogue.status, "catalogue_reasons": list(catalogue.reasons),
-        "observation_unit": catalogue.observation_unit}
-    unit_detail = None
-    unit_input = None
-    if catalogue.status != "qualified":
-        diag.update(status="unqualified_catalogue", probability_status="not_available",
-                    state_count=None, state_space_complete=None,
-                    state_space_reason="not_enumerated_unqualified_catalogue")
-    else:
-        space = enumerate_space(catalogue, max_states)
-        diag.update(state_count=len(space.states), state_space_complete=space.complete,
-                    state_space_reason=space.reason, state_space_diagnostics=space.diagnostics)
-        if not space.complete:
-            diag.update(status="state_space_incomplete", probability_status="not_available")
-        else:
-            try:
-                scenarios = observation_scenarios(space, taxa, "annotation")
-                if len(scenarios) != 1:
-                    diag.update(status="coexisting_structures_unresolved", probability_status="not_available")
-                else:
-                    label, tips = scenarios[0]
-                    informative = sum(not np.all(values == values[0]) for values in tips.values())
-                    unknown_tips = [species for species, values in tips.items()
-                                    if np.all(values == 1)]
-                    diag.update(observation_scenario=label, informative_tips=informative,
-                                unknown_tips=unknown_tips)
-                    if informative < 2:
-                        diag.update(status="fewer_than_two_informative_tips", probability_status="not_available")
-                    else:
-                        diag.update(status="eligible_conditional_unit",
-                            probability_status="not_computed" if state_space_only else "pending")
-                        if not state_space_only:
-                            unit_detail = {"catalogue": asdict(catalogue),
-                                "states": state_rows(space), "observation_scenario": label,
-                                "unknown_tips": unknown_tips}
-                            unit_input = {"unit_id": catalogue.unit, "space": space,
-                                "tree": tree, "tips": tips}
-                        if unknown_tips:
-                            diag["status"] = "eligible_with_unknown_tips"
-            except ValueError as exc:
-                diag.update(status="observation_unresolved", probability_status="not_available",
-                            reason=str(exc))
-    _write_state_space_progress(progress, {**diag,
-        "stage": ("enumeration_and_eligibility_complete" if catalogue.status == "qualified"
-                  else "unit_assessment_complete")})
-    return diag, unit_detail, unit_input
 
 
 def infer_genomic_exons(input_dir, output_dir, *, configurations=None, rates=None,
