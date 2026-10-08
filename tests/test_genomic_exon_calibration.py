@@ -1,17 +1,21 @@
 import json
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
 import numpy as np
 
 from intraphy.commands.parser import build_parser
+from intraphy.inference import configuration_compact
 from intraphy.inference import genomic_exon_calibration as calibration
-from intraphy.inference.configuration_model import RateModel
+from intraphy.inference.configuration_model import RateModel, evaluate_model
 from intraphy.inference.exon_rates import InferenceUnit
 from intraphy.inference.exon_resampling import sample_unit_history, simulate_unit
 from intraphy.inference.genomic_exon_rates import fit_family_rate
+from intraphy.inference.genomic_exon_branches import branch_change_rows
+from intraphy.inference.genomic_exon_output import state_rows
 from intraphy.verification.genomic_exon_calibration import score_replicate, summarize_arm
 from intraphy.structure.edits import EDIT_KINDS
 from intraphy.structure.space import enumerate_space
@@ -70,6 +74,84 @@ class GenomicExonCalibrationTests(unittest.TestCase):
         self.assertEqual(len(deletion.material), 1)
         self.assertEqual((deletion.material[0].start, deletion.material[0].end), (0, deletion.length))
 
+    def test_scoring_uses_compact_posterior_and_matches_dense_reference(self):
+        model = RateModel({kind: .2 for kind in EDIT_KINDS})
+        for index, scenario in enumerate(("geometry", "shared-deletion")):
+            with self.subTest(scenario=scenario):
+                unit = self.template(scenario)
+                observed, assigned, origins = sample_unit_history(
+                    unit, model, np.random.default_rng(311 + index))
+                latent = [(observed, assigned, origins)]
+                with mock.patch.object(configuration_compact, "evaluate_compact",
+                                       wraps=configuration_compact.evaluate_compact) as compact:
+                    scored = score_replicate("fixed", index + 1, [unit], latent, model)
+                self.assertEqual(compact.call_count, 1)
+
+                dense = evaluate_model(observed.space, observed.tree, observed.tips,
+                                       model, posterior=True, counts=False)
+                dense_result = {"family_id": observed.family, "unit_id": observed.unit,
+                                "states": state_rows(observed.space), "ctmc": dense}
+                reference_rows = branch_change_rows(
+                    [{"family_id": observed.family, "units": [dense_result]}],
+                    {}, observed.tree)
+                reference = {}
+                for row in reference_rows:
+                    key = (row["parent_node_id"], row["child_node_id"])
+                    reference.setdefault(key, {"probability": row["probability_exon_structure_change"],
+                        "modes": set()})["modes"].add((
+                            tuple(tuple(span) for span in row["parent_exons"]),
+                            tuple(row["parent_dna_presence"]),
+                            tuple(tuple(span) for span in row["child_exons"]),
+                            tuple(row["child_dna_presence"])))
+
+                self.assertEqual(len(scored), len(reference))
+                for row in scored:
+                    key = (row["parent_node_id"], row["child_node_id"])
+                    self.assertAlmostEqual(row["probability_change"],
+                                           reference[key]["probability"], places=12)
+                    self.assertEqual(set(row["modal_pairs"]), reference[key]["modes"])
+
+    def test_zero_rate_all_unknown_tips_preserve_dense_modal_ties(self):
+        unit = self.template("geometry")
+        truth_model = RateModel({kind: .2 for kind in EDIT_KINDS})
+        zero_model = RateModel({kind: 0. for kind in EDIT_KINDS})
+        sampled, assigned, origins = sample_unit_history(
+            unit, truth_model, np.random.default_rng(417))
+        observed = replace(sampled, tips={
+            species: np.ones(len(sampled.space.states)) for species in sampled.tips
+        })
+
+        with mock.patch.object(configuration_compact, "evaluate_compact",
+                               wraps=configuration_compact.evaluate_compact) as compact:
+            scored = score_replicate(
+                "fixed", 1, [unit], [(observed, assigned, origins)], zero_model)
+        self.assertEqual(compact.call_count, 1)
+
+        dense = evaluate_model(observed.space, observed.tree, observed.tips,
+                               zero_model, posterior=True, counts=False)
+        dense_result = {"family_id": observed.family, "unit_id": observed.unit,
+                        "states": state_rows(observed.space), "ctmc": dense}
+        reference_rows = branch_change_rows(
+            [{"family_id": observed.family, "units": [dense_result]}],
+            {}, observed.tree)
+        reference = {}
+        for row in reference_rows:
+            key = (row["parent_node_id"], row["child_node_id"])
+            reference.setdefault(key, {"probability": row["probability_exon_structure_change"],
+                "modes": set()})["modes"].add((
+                    tuple(tuple(span) for span in row["parent_exons"]),
+                    tuple(row["parent_dna_presence"]),
+                    tuple(tuple(span) for span in row["child_exons"]),
+                    tuple(row["child_dna_presence"])))
+
+        self.assertEqual(len(scored), len(reference))
+        for row in scored:
+            key = (row["parent_node_id"], row["child_node_id"])
+            self.assertAlmostEqual(row["probability_change"],
+                                   reference[key]["probability"], places=12)
+            self.assertEqual(set(row["modal_pairs"]), reference[key]["modes"])
+        self.assertTrue(any(row["modal_tie_count"] > 1 for row in scored))
+
     def test_fit_receives_only_observed_units_and_outputs_scores(self):
         captured = []
 
@@ -94,6 +176,7 @@ class GenomicExonCalibrationTests(unittest.TestCase):
                 self.assertTrue((Path(temporary) / filename).exists())
             metadata = json.loads((Path(temporary) / "calibration_metadata.json").read_text())
             self.assertFalse(metadata["discovery_pipeline_calibrated"])
+            self.assertEqual(metadata["posterior_backend"], "compact_origin_subset")
             self.assertEqual(metadata["generating_model"]["rates"]["split"], .2)
             self.assertIn("each other canonical node", metadata["material_origin_sampling"])
 
@@ -155,6 +238,9 @@ class GenomicExonCalibrationTests(unittest.TestCase):
             self.assertEqual(result["estimated"]["nonidentified_replicates"], 2)
             self.assertEqual(result["estimated"]["scored_replicates"], 0)
             self.assertEqual(result["fixed"]["scored_replicates"], 2)
+            metadata = json.loads((Path(temporary) / "calibration_metadata.json").read_text())
+            self.assertEqual(metadata["posterior_backend"], "compact_origin_subset")
+            self.assertEqual(metadata["scenario"], "geometry")
 
     def test_numerical_fit_failure_is_recorded_without_suppressing_fixed_scores(self):
         with tempfile.TemporaryDirectory() as temporary, \

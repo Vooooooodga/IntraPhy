@@ -152,9 +152,11 @@ intraphy calibrate-exons --scenario geometry --rate 0.2 --units 2 \
 The `shared-deletion` scenario uses a material tract spanning two exons. Each
 replicate contains independent local units sharing a generated rate. Outputs
 compare fixed-rate reference inference with inference after estimating the rate
-from tips, state spaces, and tree. Failed or nonidentified fits remain counted
-per arm. This calibration is conditional on its fixed catalogues; FASTA/GFF
-catalogue discovery is not calibrated.
+from tips, state spaces, and tree. Both arms score endpoint probabilities with
+the production compact origin-subset posterior evaluator used by the default
+native route. Failed or nonidentified fits remain counted per arm. This
+calibration is conditional on its fixed catalogues; FASTA/GFF catalogue
+discovery is not calibrated.
 
 ## Separate DNA-presence histories
 

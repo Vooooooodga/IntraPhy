@@ -149,6 +149,7 @@ def calibrate_genomic_exons(output_dir, scenario, rate, units, replicates, seed)
         "catalogue_discovery": "independent_catalogue",
         "observation_unit": "genomic_exon_spans",
         "generating_model": asdict(truth_model),
+        "posterior_backend": "compact_origin_subset",
         "material_origin_sampling": "one origin per material tract; root weight is origin_root_weight and each other canonical node has weight 1",
         "root_state_sampling": "uniform among states whose material mask is 1 for root-origin tracts and 0 otherwise",
         "calibration_scope": "fixed_catalogue_conditional_calibration",

@@ -5,14 +5,14 @@ import numpy as np
 
 
 def score_replicate(arm, replicate, units, latent, model):
-    from ..inference.configuration_model import evaluate_model
+    from ..inference.configuration_compact import evaluate_compact
     from ..inference.genomic_exon_branches import branch_change_rows
     from ..inference.genomic_exon_output import state_rows
 
     output = []
     for unit, (observed, assigned, _) in zip(units, latent):
-        posterior = evaluate_model(observed.space, observed.tree, observed.tips,
-                                   model, posterior=True, counts=False)
+        posterior = evaluate_compact(observed.space, observed.tree, observed.tips,
+                                     model, counts=False)
         result = {"family_id": observed.family, "unit_id": observed.unit,
                   "states": state_rows(observed.space), "ctmc": posterior}
         rows = branch_change_rows([{"family_id": observed.family, "units": [result]}],
