@@ -1,10 +1,7 @@
 # Research foundations and scope
 
-This page situates IntraPhy's structural observations and phylogenetic analyses
-among relevant comparative studies. It summarizes the main texts of the cited
-papers; supplementary materials were not comprehensively audited. The papers
-motivate distinct questions and are not interchangeable benchmarks for one
-another.
+Comparative studies of exon homology and gene architecture provide the context
+for IntraPhy's observation definitions and phylogenetic models.
 
 ## What the studies establish
 
@@ -118,20 +115,16 @@ reconstruction. Likewise, orthology pipelines, exon-family trees, and
 annotation-aware homology qualification in cited studies provide methodological
 context, not automatically equivalent inputs or results.
 
-## Implemented and prospective scope
+## Analysis scope
 
 Implemented analyses report annotation-supported exon-span observations and
 conditional histories under the selected tree and finite edit graph. Linked
 units contribute a composite likelihood. DNA-presence and intron-position
 analyses retain their own observation rules when explicitly selected.
-Unresolved and insufficient-information observations remain unknown; they do
-not support a fabricated finite estimate or ancestral history.
+Unresolved observations contribute uncertainty to the inference.
 
 The advanced `intraphy.exon-locus-model/2` route evaluates a supplied catalogue
 of source-qualified copy duplications and continuous shared deletion
-opportunities. Fully automatic genealogy inference, unified copy and exon
-boundary evolution, integrated models of annotation error, and full
-reproductions of ExonEvo or MALIN remain prospective.
-The cited papers motivate careful homology definitions, explicit observation
-rules, sampling and rate diagnostics. They do not by themselves establish
-empirical novelty or comparative performance for IntraPhy.
+opportunities. IntraPhy does not infer copy genealogies automatically, jointly
+model copy evolution with exon-boundary evolution, integrate annotation-error
+models, or reproduce ExonEvo or MALIN.

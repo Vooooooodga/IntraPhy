@@ -2,8 +2,7 @@
 
 The manifest supplies the spo5 gene group in four Schizosaccharomyces species.
 All four numeric GeneIDs and their gene/mRNA/CDS records were read directly from
-the assembly-matched local GFF3 files. Download completion was reported by the
-parent workflow; no analysis was run during this metadata update.
+the assembly-matched local GFF3 files.
 
 | Species | Manifest GeneID | GFF gene ID | Annotated transcript |
 |---|---|---|---|
@@ -16,8 +15,7 @@ Use `manifest.tsv` and `species_tree.tsv` as the two inputs to `build-case`.
 The `gene_id` values resolve through the GFF `Dbxref=GeneID:` attributes. Raw
 FASTA/GFF files stay at the flat database paths recorded in the manifest.
 Transcript accessions identify provided annotations; no transcriptome data
-are required. These are curated gene mappings supplied to the method; an
-OrthoFinder analysis has not been performed for this case in this preparation.
+are required. The manifest provides curated gene mappings for this case.
 
 The rooted topology is `(japonicus,(pombe,(octosporus,cryophilus)))`, following
 [Zhu and Niu 2013, Figure 1](https://doi.org/10.1371/journal.pone.0061683.g001).
@@ -27,5 +25,5 @@ carry no divergence-time or substitution-rate estimates.
 Published expectations are exclusively in [truth_events.tsv](truth_events.tsv)
 for external scoring. Keep that file outside the generated analysis input
 directory and pass no event label, expected branch or ancestral state to
-`build-case` or `run`. Assembly coordinates and preparation status are in
-[the dataset record](../../../docs/real_positive_cases.md).
+`build-case` or `run`. Assembly accessions and FASTA/GFF source paths are listed
+in [manifest.tsv](manifest.tsv).

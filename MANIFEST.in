@@ -1,4 +1,4 @@
-include README.md CHANGELOG.md ROADMAP.md LICENSE CITATION.cff requirements-ci.txt
+include README.md CHANGELOG.md LICENSE CITATION.cff requirements-ci.txt
 recursive-include docs *.md *.svg *.png *.json *.jsonl *.tsv *.html
 recursive-include examples *
 recursive-include fixtures *

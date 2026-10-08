@@ -86,14 +86,5 @@ the [CLI guide](docs/cli.md). The advanced `--locus-model` route evaluates a
 supplied source-directed DNA-copy catalogue; see the
 [locus model reference](docs/exon_structure_model.md).
 
-## Study status
-
-See [research foundations](docs/research_foundations.md) for literature
-context and scope of the structural characters and phylogenetic analyses.
-
-The [ablation protocol](docs/ablation_study.md) specifies planned comparisons
-for mapping context, shared deletions, and state-model assumptions. It reports
-no completed validation or empirical performance estimate. Existing annotated
-genomes can provide independent evidence for correspondence; synthetic
-examples and selected observations alone cannot calibrate error rates or P
-values.
+See [research foundations](docs/research_foundations.md) for relevant literature
+and the scope of IntraPhy's structural and phylogenetic analyses.

@@ -1,5 +1,5 @@
 cff-version: 1.2.0
-title: "IntraPhy: phylogenetic inference of exon-copy and splice-feature evolution"
+title: "IntraPhy: phylogenetic inference of genomic exon-structure evolution"
 message: "If you use IntraPhy, cite the software release and methods references relevant to your analysis."
 type: software
 version: 0.20.0

@@ -64,4 +64,5 @@ or a claim of 28 experimentally validated capabilities.
 | 28 | Multicopy families or gene fusion | Outside formal single-copy inference; historical experimental code remains separate. |
 
 No molecular mechanism, selection coefficient, phenotypic cause or independent
-mutation count is inferred. See [validation](validation.md) for unperformed work.
+mutation count is inferred. [Software tests](validation.md) do not establish
+biological accuracy or statistical calibration.

@@ -1,38 +1,28 @@
-# 0.20.0 — exon-copy and splice-feature CTMC
+# 0.20.0 — exon structure and DNA-copy evolution models
 
-- Add a strict `intraphy.exon-locus-model/1` JSON input for evidence-qualified
-  copy positions, DNA lifecycle, exon/splice availability, root support,
-  observations and a finite event-opportunity catalogue.
-- Compile the full root-seeded reachable state closure and evaluate joint
-  continuous-time histories on a fixed rooted species tree.
-- Add global rate groups with mixed fixed/fit modes, conditional ML diagnostics,
-  ancestral material/copy/feature marginals and expected branch event counts.
-- Preserve raw FASTA/GFF preparation and named compatibility model paths; the
-  locus model requires its own explicit biological catalogue.
+- Map physical exon spans across species from genomic FASTA and gene annotations,
+  then fit the default exon-structure CTMC on the supplied rooted species tree.
+- Fit one nonnegative rate per family, shared across elementary edits and linked
+  local units; report ancestral exon configurations and branch endpoint changes.
+- Add source-directed DNA-copy evolution through the advanced
+  `--locus-model` route, using a supplied `intraphy.exon-locus-model/2` catalogue.
+- Preserve raw FASTA/GFF preparation and named compatibility model paths.
 
-# 0.19.1 — V19 audit corrections (2026-09-21)
+# 0.19.1 — exon structure model corrections (2026-09-21)
 
-- Replace asymmetric interval masks with source-qualified atomic structure alternatives:
-  single/double-end annotation changes and split/fusion alternatives use the same rule.
-- Use all supplied/extracted locus DNA; record planned and actually aligned search ranges.
-- Validate physical region overlap across writers, readers, inference and rate collections.
-- Collapse unobserved non-root unary nodes and preserve edge provenance; explicitly different
-  foreground regimes are not silently erased and unsupported comparisons are rejected.
-- Expose conditional root-opportunity sensitivity, with matching simulation priors.
-- Count geometry before enumeration, use sparse shortest paths, cache state indices and
-  bound CTMC kernel reuse; do not allocate marked matrices for likelihood-only evaluation.
-- Add explicitly evidenced multi-exon insertion payloads; deduplicate opportunities.
-- Allow legal repeated-gene bootstrap draws; seed nested alternatives at the null optimum
-  and diagnose genuinely worse nested fits rather than replacing them with zero LRT.
-- Replace current scientific and architecture plates; archive V18 images. Render actual
-  ancestral configuration probabilities and branch quantities separately from parsimony.
+- Qualify annotation alternatives using complete source paths and local sequence evidence.
+- Search all supplied locus DNA for missing-exon candidates and preserve search-range
+  information in prepared results.
+- Reject overlapping physical regions across input catalogues and rate collections.
+- Preserve species-tree branch information in parsimony, likelihood and simulation results.
+- Expose root material-origin assumptions and corresponding simulation settings.
+- Count geometry before enumeration, cache state indices, and bound numerical cache reuse.
+- Represent multi-exon insertions as explicit, evidence-qualified opportunities.
+- Support repeated-gene bootstrap samples and report unresolved model comparisons.
+- Render ancestral configuration probabilities and branch summaries separately from
+  minimum-change histories.
 - Configuration model/schema becomes v2. Old catalogues/results are rejected with a
   regenerate-from-original-inputs message, never silently relabeled.
-- Add audit regressions and sequence-changing positive controls. Existing GFF-only
-  intronization test is explicitly reclassified as annotation sensitivity.
-
-No new biological benchmark, full alignment-error model, repair-pathway inference,
-complete source-immigration process or broad significance calibration is claimed.
 
 ---
 
@@ -61,7 +51,7 @@ complete source-immigration process or broad significance calibration is claimed
 - V18 binary models remain explicit legacy baselines. No RNA usage analysis added.
 
 No independent biological benchmark or genome-wide discovery-aware statistical
-calibration is claimed by this release. See docs/v19_validation.md.
+calibration is claimed by this release.
 
 ---
 
@@ -106,6 +96,3 @@ Earlier release notes and unchanged historical validation remain in repository h
   production pruning and posterior algorithms; fixed teaching parameters are explicit.
 - Document likelihood construction, missing-state treatment, rate-sharing scope,
   character dependence and conditional inference in `docs/model_bridge.md`.
-- Record which primary methods, figure captions and image assets were examined.
-- Local full-suite validation: 446 tests passed with real MAFFT and minimap2; this
-  is implementation validation, not a biological benchmark or statistical calibration.

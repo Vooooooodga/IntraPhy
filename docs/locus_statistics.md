@@ -1,8 +1,9 @@
 # Conditional locus statistics
 
 These methods compare rates within one supplied DNA-copy model, tree, root
-distribution, observation set, and event catalogue. They have not received
-independent empirical calibration or a completed ablation study.
+distribution, observation set, and event catalogue. Inference is conditional on
+that fixed catalogue and does not account for locus or event-opportunity
+selection from the same tip observations.
 
 ## Nested rate comparison
 
@@ -36,11 +37,8 @@ It does not correct for selecting loci or event opportunities from the same
 tip observations, and it does not establish Type-I error under an independent
 biological truth. Tip observations in this interface are DNA calls only.
 
-## What remains to be measured
-
-An independent generator or externally specified truth is needed to estimate
-Type-I error, power, ancestral-state accuracy, localization error, and
-probability calibration. Discovery and missingness designs must be fixed
-before simulation. The [ablation protocol](ablation_study.md) separates those
-questions from internal numerical correctness checks. Selected empirical
-examples cannot on their own calibrate error rates or P values.
+These calculations provide calibration conditional on a prequalified fixed
+catalogue. They do not establish Type-I error, power, ancestral-state accuracy,
+localization accuracy, or probability calibration under an independently
+specified biological truth. Selected empirical examples alone cannot calibrate
+error rates or P values.

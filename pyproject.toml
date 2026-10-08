@@ -1,7 +1,7 @@
 [project]
 name = "intraphy"
 version = "0.20.0"
-description = "Evidence-qualified exon-copy and splice-feature evolution on species trees"
+description = "Phylogenetic inference of genomic exon-structure evolution"
 requires-python = ">=3.10"
 dependencies = [
     "numpy>=1.23",

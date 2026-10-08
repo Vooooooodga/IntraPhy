@@ -53,8 +53,8 @@ production likelihood and posterior routines. Gene diagrams remain beside the
 same tree; no complete ancestral transcript is reconstructed from marginal states.
 
 See [the mathematical bridge](model_bridge.md) for likelihood, unknown-state
-weights, rate sharing, ascertainment and limits. See [the literature audit](literature_figure_audit.md)
-for precise sources and what was actually examined.
+weights, rate sharing, ascertainment and limits, and [research foundations](research_foundations.md)
+for relevant literature and methodological context.
 
 ## Reproduce and edit
 

@@ -189,9 +189,8 @@ GFF is unsafe. Use IntraPhy's coordinate-safe locus export or an explicitly
 consistent external conversion. `--type exon --merge` creates spliced sequence
 and must not be supplied as genomic DNA for structure analysis.
 
-The AGAT adapter has interface tests. A real AGAT executable was not present in
-the local development environment; no real-AGAT integration or biological
-validation is claimed by those mocked-process tests.
+The AGAT adapter's interface tests use mocked subprocesses and do not assess
+normalization accuracy with the real tool.
 
 Official documentation:
 [normalization](https://agat.readthedocs.io/en/latest/tools/agat_convert_sp_gxf2gxf.html),
