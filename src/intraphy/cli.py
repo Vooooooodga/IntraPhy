@@ -35,6 +35,7 @@ def _dispatch(args):
             args.output_dir, branch_length_mode=args.branch_length_mode,
             max_states=args.max_states, max_origins=args.max_origin_scenarios,
             profile_multipliers=args.profile_multipliers or (), threads=args.threads,
+            preparation_summary=args.preparation_summary,
         )
         return
     if args.command in {"locus-statistics", "prepare-locus-evidence"}:
@@ -146,6 +147,9 @@ def _dispatch(args):
         from .inference.genomic_exon_calibration import calibrate_genomic_exons
         calibrate_genomic_exons(args.output_dir, args.scenario, args.rate,
                                 args.units, args.replicates, args.seed)
+    elif args.command == "calibrate-exon-comparison":
+        from .commands.exon_comparison_calibration import dispatch_calibration
+        dispatch_calibration(args)
     elif args.command == "visualize":
         from .run_result import result_model
         model_name = str(result_model(args.result_dir))

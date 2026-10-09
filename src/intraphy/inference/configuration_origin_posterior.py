@@ -151,7 +151,8 @@ def evaluate_origin_posterior(space, tree, tips, model, lengths, *,
     nodes = _node_marginals(tree, inside, outside, total, len(space.states))
     branches = branch_scalars(tree, lengths, inside, edge_messages,
         node_masks, edge_generator, exon_groups, exon_count,
-        dna_groups, dna_count, state_exon_counts, block_size, total)
+        dna_groups, dna_count, state_groups, len(configurations),
+        state_exon_counts, block_size, total)
     modal = modal_rows(tree, lengths, inside, edge_messages, nodes,
         node_masks, edge_generator, configurations, state_groups,
         block_size, tie_atol, tie_rtol, total)

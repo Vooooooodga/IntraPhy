@@ -1,8 +1,8 @@
-"""Prepare V19 exon configuration evidence using existing FASTA/GFF extraction."""
+"""Prepare native genomic exon-span configurations from extracted FASTA/GFF evidence."""
 from __future__ import annotations
 from collections import defaultdict
 from pathlib import Path
-from ..storage.tabular import write_tsv
+from ..storage.tabular import read_tsv, write_tsv
 from .native import load_native
 from .consequences import native_cds
 from .alignment import align_family
@@ -13,6 +13,65 @@ from .serialization import write_catalogues, write_json
 
 def _table(path, rows, fields):
     write_tsv(path, rows, list(dict.fromkeys(fields + [k for row in rows for k in row])))
+
+
+def read_preparation_summary(path):
+    """Read the explicit family roster emitted by native preparation."""
+    required = ("family_id", "status", "units", "qualified_units", "reason",
+                "evidence_directory")
+    rows = read_tsv(path, required=required)
+    if not rows:
+        raise ValueError("Preparation summary contains no family targets")
+    result = []
+    seen = set()
+    for number, row in enumerate(rows, 2):
+        family = row["family_id"].strip()
+        status = row["status"].strip()
+        if not family or family in {"NA", "None"} or family in seen:
+            raise ValueError(f"Invalid or duplicate family_id in preparation summary row {number}")
+        seen.add(family)
+        if status not in {"prepared", "unresolved"}:
+            raise ValueError(f"Invalid preparation status for {family}: {status!r}")
+        try:
+            units = int(row["units"])
+            qualified = int(row["qualified_units"])
+        except ValueError as exc:
+            raise ValueError(f"Invalid unit counts for {family} in preparation summary") from exc
+        if units < 0 or qualified < 0 or qualified > units:
+            raise ValueError(f"Invalid unit counts for {family} in preparation summary")
+        reason = row["reason"].strip()
+        if status == "unresolved" and (units != 0 or qualified != 0 or not reason
+                                        or reason == "NA"):
+            raise ValueError(f"Unresolved preparation row for {family} has invalid counts or reason")
+        if status == "prepared" and reason not in {"", "NA"}:
+            raise ValueError(f"Prepared family {family} has an exclusion reason")
+        result.append({"family_id": family, "status": status, "units": units,
+                       "qualified_units": qualified,
+                       "reason": "" if reason == "NA" else reason,
+                       "evidence_directory": row["evidence_directory"]})
+    return tuple(result)
+
+
+def validate_preparation_catalogues(preparation_roster, catalogues):
+    """Validate supplied family/unit counts against an explicit preparation roster."""
+    if preparation_roster is None:
+        return tuple(sorted({catalogue.family for catalogue in catalogues}))
+    targets = {row["family_id"]: row for row in preparation_roster}
+    supplied_counts = defaultdict(int)
+    for catalogue in catalogues:
+        family = catalogue.family
+        if family not in targets:
+            raise ValueError("Catalogue families absent from --preparation-summary: "
+                             + family)
+        target = targets[family]
+        if target["status"] != "prepared" or target["units"] == 0:
+            raise ValueError("Catalogue family is unresolved or has zero generated units "
+                             "in --preparation-summary: " + family)
+        supplied_counts[family] += 1
+        if supplied_counts[family] > target["units"]:
+            raise ValueError("Supplied catalogue unit count exceeds preparation summary for "
+                             + family)
+    return tuple(sorted(supplied_counts))
 
 
 def prepare_configurations(input_dir: str | Path, output_dir: str | Path, *,

@@ -1,14 +1,20 @@
-"""Exact sparse-generator likelihood evaluation without dense transition matrices."""
+"""Exact likelihood actions using sparse generators and bounded dense kernels."""
 from __future__ import annotations
 
 import math
 import numpy as np
+from scipy.linalg import expm
 from scipy.sparse import csr_matrix
 from scipy.sparse.linalg import expm_multiply
 from scipy.special import logsumexp
 
 from ..structure.origins import permitted
 from .configuration_uniformization import log_uniformization_action
+
+
+# This threshold selects the exponential-action implementation only; state-space
+# enumeration and model support remain unrestricted.
+DENSE_ACTION_SIZE = 16
 
 
 def sparse_generator(space, model, origins, child):
@@ -77,16 +83,21 @@ def log_action(q, length, log_values):
         raise ArithmeticError("Scaled sparse generator trace overflowed")
     output = np.full(values.shape, -np.inf)
     if fast_columns.size:
-        result = expm_multiply(a, vector[:, fast_columns], traceA=trace)
+        if q.shape[0] <= DENSE_ACTION_SIZE:
+            transition = expm(a.toarray())
+            result = transition @ vector[:, fast_columns]
+        else:
+            result = expm_multiply(a, vector[:, fast_columns], traceA=trace)
         if not np.isfinite(result).all() or np.any(result < 0):
             raise ArithmeticError("Sparse CTMC action produced nonfinite or negative values")
         for index, column in enumerate(fast_columns):
             positive = result[:, index] > 0
-            reachable = _support_after_edge(
-                q, length, np.isfinite(normalized[:, column]))
-            if np.any(reachable & ~positive):
-                fallback[column] = True
-                continue
+            if not positive.all():
+                reachable = _support_after_edge(
+                    q, length, np.isfinite(normalized[:, column]))
+                if np.any(reachable & ~positive):
+                    fallback[column] = True
+                    continue
             output[positive, column] = (
                 np.log(result[positive, index]) + shifts[column])
     fallback_columns = np.flatnonzero(fallback)

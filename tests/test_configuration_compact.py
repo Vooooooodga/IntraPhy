@@ -81,7 +81,23 @@ class ConfigurationCompactTests(unittest.TestCase):
                              for j, b in enumerate(groups) if a[0] == b[0])
             same_dna = sum(grouped[i, j] for i, a in enumerate(groups)
                            for j, b in enumerate(groups) if a[1] == b[1])
+            categories = [0., 0., 0., 0.]
+            for i, parent in enumerate(groups):
+                for j, child in enumerate(groups):
+                    exon_changed = parent[0] != child[0]
+                    material_changed = parent[1] != child[1]
+                    category = (3 if exon_changed and material_changed else
+                                1 if exon_changed else 2 if material_changed else 0)
+                    categories[category] += grouped[i, j]
             summary = branch["observable_endpoint_summary"]
+            for key, expected_category in zip(("probability_neither_changed",
+                    "probability_exon_only_changed", "probability_material_only_changed",
+                    "probability_both_changed"), categories):
+                self.assertAlmostEqual(summary[key], expected_category, places=9)
+            self.assertAlmostEqual(sum(summary[key] for key in (
+                "probability_neither_changed", "probability_exon_only_changed",
+                "probability_material_only_changed", "probability_both_changed")), 1.,
+                places=9)
             exon_counts = np.asarray([len(state.exons) for state in space.states])
             maximum_count = int(exon_counts.max(initial=0))
             expected_count_pairs = np.zeros((maximum_count + 1, maximum_count + 1))

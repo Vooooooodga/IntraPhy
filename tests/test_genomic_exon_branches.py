@@ -31,11 +31,12 @@ def _tree():
     ])
 
 
-def _rows(states, endpoint, *, offset=0):
+def _rows(states, endpoint, *, offset=0, materials=()):
     results = [{"family_id": "f", "units": [{"unit_id": "u", "states": states,
         "ctmc": {"branches": [{"parent": "root", "child": "branch",
                                 "endpoint_probabilities": endpoint}]}}]}]
-    details = {("f", "u"): {"catalogue": {"alignment_offset": offset}}}
+    details = {("f", "u"): {"catalogue": {"alignment_offset": offset,
+                                               "material": materials}}}
     return branch_change_rows(results, details, _tree())
 
 
@@ -58,6 +59,30 @@ class GenomicExonBranchTests(unittest.TestCase):
         self.assertEqual(len(same_absence), 1)
         self.assertAlmostEqual(same_absence[0]["joint_configuration_probability"], .7)
         self.assertAlmostEqual(same_absence[0]["probability_dna_presence_change"], .2)
+
+    def test_four_joint_endpoint_categories_are_mutually_exclusive(self):
+        states = [{"exons": [[0, 2]], "material": [0]},
+                  {"exons": [[4, 6]], "material": [0]},
+                  {"exons": [[0, 2]], "material": [1]},
+                  {"exons": [[4, 6]], "material": [1]}]
+        rows = _rows(states, [[.4, .1, .2, .3], [0., 0., 0., 0.],
+                              [0., 0., 0., 0.], [0., 0., 0., 0.]],
+                     materials=({"id": "m1", "start": 20, "end": 22},))
+        row = rows[0]
+        self.assertEqual(row["probability_neither_changed"], .4)
+        self.assertEqual(row["probability_exon_only_changed"], .1)
+        self.assertEqual(row["probability_material_only_changed"], .2)
+        self.assertEqual(row["probability_both_changed"], .3)
+        self.assertAlmostEqual(sum(row[key] for key in (
+            "probability_neither_changed", "probability_exon_only_changed",
+            "probability_material_only_changed", "probability_both_changed")), 1.)
+        self.assertEqual(row["material_tract_count"], 1)
+        self.assertEqual(row["dna_presence_scope"], "declared_material_tracts_only")
+
+    def test_dense_endpoint_rejects_nonfinite_posterior_mass(self):
+        states = [{"exons": [[0, 2]], "material": []}]
+        with self.assertRaisesRegex(ArithmeticError, "Invalid dense exon-count"):
+            _rows(states, [[np.nan]])
 
     def test_all_exactly_tied_joint_modes_are_retained(self):
         states = [{"exons": [[0, 2]], "material": []},
@@ -139,6 +164,13 @@ class GenomicExonBranchTests(unittest.TestCase):
                                    expected["probability_exon_structure_change"], places=9)
             self.assertAlmostEqual(row["probability_dna_presence_change"],
                                    expected["probability_dna_presence_change"], places=9)
+            for field in ("probability_neither_changed",
+                          "probability_exon_only_changed",
+                          "probability_material_only_changed",
+                          "probability_both_changed"):
+                self.assertAlmostEqual(row[field], expected[field], places=9)
+            self.assertEqual(row["material_tract_count"], 0)
+            self.assertEqual(row["dna_presence_scope"], "no_material_tracts_declared")
             self.assertEqual(row["change_classification"], expected["change_classification"])
             self.assertEqual([(pair["parent_count"], pair["child_count"])
                               for pair in row["exon_count_pair_probabilities"]],
@@ -234,6 +266,10 @@ class GenomicExonBranchTests(unittest.TestCase):
             headers = table.read_text().splitlines()[0].split("\t")
             self.assertIn("exon_count_pair_probabilities", headers)
             self.assertIn("probability_exon_count_unchanged", headers)
+            for field in ("probability_neither_changed", "probability_exon_only_changed",
+                          "probability_material_only_changed", "probability_both_changed",
+                          "material_tract_count"):
+                self.assertIn(field, headers)
 
     def test_small_fixed_catalogue_default_run_writes_branch_changes_without_event_counts(self):
         with tempfile.TemporaryDirectory() as temp:

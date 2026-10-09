@@ -10,6 +10,26 @@ INTERPRETATION_SCOPE = (
 )
 JOINT_MODE_ATOL = 1e-12
 JOINT_MODE_RTOL = 1e-12
+ENDPOINT_CATEGORY_BOUND_TOLERANCE = 1e-10
+ENDPOINT_CATEGORY_MASS_TOLERANCE = 1e-8
+
+
+def _checked_endpoint_categories(values):
+    """Check a complete four-way endpoint partition without renormalizing it."""
+    probabilities = []
+    for value in values:
+        value = float(value)
+        if (not np.isfinite(value)
+                or value < -ENDPOINT_CATEGORY_BOUND_TOLERANCE
+                or value > 1. + ENDPOINT_CATEGORY_BOUND_TOLERANCE):
+            raise ArithmeticError("Invalid joint endpoint category probability")
+        probabilities.append(min(1., max(0., value)))
+    total = sum(probabilities)
+    if abs(total - 1.) > ENDPOINT_CATEGORY_MASS_TOLERANCE:
+        raise ArithmeticError(
+            "Joint endpoint category probabilities do not sum to one "
+            f"within {ENDPOINT_CATEGORY_MASS_TOLERANCE:g}: {total}")
+    return tuple(probabilities)
 
 
 def observable_configuration(state):
@@ -115,7 +135,8 @@ def _descendant_map(tree):
 
 def _row(family, result, parent_id, child_id, descendant_species, parent, child,
          probability_exon_change, probability_dna_change, probability, materials,
-         offset, count_summary, mode_tolerance=None, evaluated=None, group_count=None):
+         offset, count_summary, mode_tolerance=None, evaluated=None, group_count=None,
+         endpoint_categories=None):
     dna_changed = parent[1] != child[1]
     changed_intervals = _changed_material_intervals(parent[1], child[1], materials)
     row = {
@@ -124,6 +145,7 @@ def _row(family, result, parent_id, child_id, descendant_species, parent, child,
         "descendant_species": descendant_species,
         "probability_exon_structure_change": probability_exon_change,
         "probability_dna_presence_change": probability_dna_change,
+        **(endpoint_categories or {}),
         **count_summary,
         "joint_configuration_probability": probability,
         "parent_exons": parent[0], "child_exons": child[0],
@@ -138,7 +160,9 @@ def _row(family, result, parent_id, child_id, descendant_species, parent, child,
         "change_classification": classify_exon_change(
             parent[0], child[0], dna_changed=dna_changed,
             changed_material_intervals=changed_intervals),
-        "dna_presence_scope": "declared_material_tracts_only",
+        "material_tract_count": len(materials),
+        "dna_presence_scope": ("declared_material_tracts_only" if materials
+                                else "no_material_tracts_declared"),
         "coordinate_system": COORDINATE_SYSTEM,
         "alignment_offset": offset,
         "interpretation_scope": INTERPRETATION_SCOPE,
@@ -195,7 +219,12 @@ def branch_change_rows(family_results, unit_details, tree):
                                 "probability_exon_count_decrease",
                                 "probability_exon_count_unchanged")},
                             tolerance, summary["parent_group_rows_evaluated"],
-                            summary["parent_group_count"]))
+                            summary["parent_group_count"],
+                            {key: summary[key] for key in (
+                                "probability_neither_changed",
+                                "probability_exon_only_changed",
+                                "probability_material_only_changed",
+                                "probability_both_changed")}))
                     continue
                 endpoint = branch.get("endpoint_probabilities")
                 if endpoint is None:
@@ -216,6 +245,17 @@ def branch_change_rows(family_results, unit_details, tree):
                 tied_modes = np.argwhere(np.abs(grouped - max_probability) <= tie_tolerance)
                 probability_exon_change = float(grouped[exon_change].sum())
                 probability_dna_change = float(grouped[dna_change].sum())
+                neither_changed = float(grouped[~exon_change & ~dna_change].sum())
+                category_values = _checked_endpoint_categories((
+                    neither_changed,
+                    grouped[exon_change & ~dna_change].sum(),
+                    grouped[~exon_change & dna_change].sum(),
+                    grouped[exon_change & dna_change].sum()))
+                endpoint_categories = dict(zip((
+                    "probability_neither_changed",
+                    "probability_exon_only_changed",
+                    "probability_material_only_changed",
+                    "probability_both_changed"), category_values))
                 exon_counts = np.asarray([len(configuration[0])
                                           for configuration in state_configs], dtype=np.int64)
                 maximum_count = int(exon_counts.max(initial=0))
@@ -245,5 +285,5 @@ def branch_change_rows(family_results, unit_details, tree):
                          "probability_exon_count_decrease": count_decrease,
                          "probability_exon_count_unchanged": count_unchanged},
                         {"absolute": JOINT_MODE_ATOL, "relative": JOINT_MODE_RTOL},
-                        len(configurations), len(configurations)))
+                        len(configurations), len(configurations), endpoint_categories))
     return rows

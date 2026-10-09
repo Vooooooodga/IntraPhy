@@ -87,7 +87,7 @@ def write_catalogues(path: str | Path, catalogues):
     temporary.replace(path)
 
 
-def read_catalogues(path: str | Path) -> tuple[Catalogue, ...]:
+def read_catalogues(path: str | Path, *, allow_empty=False) -> tuple[Catalogue, ...]:
     def unique_keys(pairs):
         result = {}
         for key, value in pairs:
@@ -104,4 +104,4 @@ def read_catalogues(path: str | Path) -> tuple[Catalogue, ...]:
                 except (ValueError, TypeError, KeyError) as exc:
                     raise ValueError(f"Invalid configuration at {path}:{line_number}: {exc}") from exc
     from .validation import validate_collection
-    return validate_collection(tuple(records))
+    return validate_collection(tuple(records), allow_empty=allow_empty)

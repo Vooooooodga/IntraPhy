@@ -172,6 +172,7 @@ and zero exposure in either branch class are rejected.
 ```bash
 intraphy compare-exon-foreground --input-dir prepared_case \
   --exon-configurations gene_a.jsonl gene_b.jsonl \
+  --preparation-summary preparation_result/exon_preparation_summary.tsv \
   --foreground-branches foreground_branches.tsv \
   --output-dir foreground_comparison \
   --profile-multipliers 0 0.5 1 2
@@ -188,6 +189,27 @@ nonnegative; zero and one are included even when omitted. Outputs include
 The JSON retains requested/eligible/excluded family-unit rosters, discovery
 scope, normalized tree, and input branch mapping. The result record identifies
 model `exon-structure-ctmc` and scope `genomic-exon-foreground-comparison`.
+
+`--preparation-summary` is optional and must point to the explicit
+`exon_preparation_summary.tsv` produced by native preparation. It restores the
+family-level target roster and each preparation exclusion reason. The result
+reports `report_scope="explicit_preparation_summary"`, with separate counts for
+original target families, generated catalogue families, supplied catalogue
+families, families eligible for fitting, preparation exclusions, and generated
+catalogue families whose records were not supplied. Catalogue families absent from
+the summary are rejected. A supplied subset remains the fitting set; omitted
+prepared families are reported as `catalogue_not_supplied`.
+With an explicit summary, `input_scope.requested_families` is the original family
+roster and `input_scope.supplied_catalogue_families` records the family subset
+actually supplied. Without a summary, both fields describe only supplied
+catalogues and the original roster is null.
+
+Without this option, the result reports
+`report_scope="provided_catalogues_only"`; the original target roster and
+preparation exclusions are unknown. The command does not infer a roster from
+nearby files. An explicit summary also permits a comparison report when every
+target failed preparation and the supplied catalogue file is empty. Empty
+catalogues without an explicit summary remain invalid.
 
 The comparison is conditional composite-likelihood inference over the declared
 catalogue and edit graph. The JSON `p_value` is null; this command does not
@@ -217,6 +239,29 @@ the production compact origin-subset posterior evaluator used by the default
 native route. Failed or nonidentified fits remain counted per arm. This
 calibration is conditional on its fixed catalogues; FASTA/GFF catalogue
 discovery is not calibrated.
+
+## Foreground-comparison calibration
+
+```bash
+intraphy calibrate-exon-comparison --scenario geometry \
+  --foreground-multiplier 1 --observation-mask complete \
+  --taxa 8 --gene-rates 0.1 0.2 0.4 0.8 \
+  --replicates 20 --seed 101 --threads 4 --output-dir calibration
+```
+
+This fixed-catalogue experiment generates four independent synthetic genes per
+replicate, each with one local unit and its own generating rate. It applies the
+specified foreground multiplier to the first-quarter tip clade on a balanced
+unit-height tree, then fits the native foreground comparison and scores the
+joint and independent-character histories at the generating multiplier. The
+`missing-tip` mask makes the last background tip wholly unknown. Partial
+candidate observations are not supported. Replicate records are flushed to
+`replicates.jsonl`; each completed record is flushed as soon as it finishes,
+and failed replicates remain in the requested denominator. Metadata and
+aggregate scores are written to `calibration_metadata.json` and `summary.json`.
+Scores are conditional on these fixed catalogue-generating conditions and do
+not establish general joint-model advantage, raw FASTA/GFF discovery accuracy,
+or calibrated significance. No p-values or confidence intervals are reported.
 
 ## Separate DNA-presence histories
 

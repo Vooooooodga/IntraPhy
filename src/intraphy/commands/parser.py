@@ -179,6 +179,25 @@ def build_parser():
     exon_cal.add_argument("--seed", type=int, default=101)
     exon_cal.add_argument("--output-dir", required=True)
 
+    exon_comparison_cal = sub.add_parser(
+        "calibrate-exon-comparison",
+        description=("Calibrate the native foreground comparison on fixed synthetic "
+                     "genomic-exon catalogues; no P values are produced."),
+    )
+    exon_comparison_cal.add_argument("--scenario", choices=("geometry", "shared-deletion"), required=True)
+    exon_comparison_cal.add_argument("--foreground-multiplier", type=float, required=True)
+    exon_comparison_cal.add_argument("--observation-mask", choices=("complete", "missing-tip"),
+                                     default="complete")
+    exon_comparison_cal.add_argument("--gene-rates", type=float, nargs="+",
+                                     default=(0.1, 0.2, 0.4, 0.8),
+                                     help="Exactly four per-gene generating rates.")
+    exon_comparison_cal.add_argument("--taxa", type=_positive_int, default=8)
+    exon_comparison_cal.add_argument("--replicates", type=_positive_int, default=20)
+    exon_comparison_cal.add_argument("--seed", type=int, default=101)
+    exon_comparison_cal.add_argument("--threads", type=_positive_int, default=1,
+                                     help="Replicate-level process workers; no nested fitting threads.")
+    exon_comparison_cal.add_argument("--output-dir", required=True)
+
     viz = sub.add_parser("visualize")
     viz.add_argument("--layout", choices=["target-groups", "legacy-overview"], default="target-groups",
                      help="One target per group on unchanged native annotation (default).")

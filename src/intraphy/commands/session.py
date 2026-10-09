@@ -11,7 +11,7 @@ from .preflight import preflight
 
 GUARDED_COMMANDS = {"build-case", "run", "infer-phylogeny", "visualize", "import-orthofinder",
                     "extract-loci", "normalize-annotation", "explain", "analyze", "fit-exon-rates", "realign-exons",
-                    "compare-exon-foreground"}
+                    "compare-exon-foreground", "calibrate-exon-comparison"}
 GUARDED_COMMANDS.update({"infer-exon-repertoires", "fit-exon-repertoire-rates"})
 GUARDED_COMMANDS.update({"locus-statistics", "prepare-locus-evidence", "prepare-genomic-evidence",
                          "calibrate-exons"})
@@ -26,6 +26,7 @@ OWNERS.add("calibration_metadata.json")
 OWNERS.update({"exon_foreground_comparison.json", "foreground_profile.tsv",
                "foreground_family_fits.tsv", "foreground_unit_diagnostics.tsv",
                "foreground_branches.tsv", "state_space_diagnostics.jsonl"})
+OWNERS.update({"replicates.jsonl", "summary.json"})
 
 
 def _write_json(path, data):
@@ -45,7 +46,7 @@ def reserve_output(args):
     if alignment_source and target.is_relative_to(Path(alignment_source).resolve()):
         raise ValueError("Output directory must not be inside --alignment-evidence-dir.")
     for field in ("input_dir", "result_dir", "genomic_evidence_dir", "alignment_evidence_dir", "structural_site_matrix", "manifest", "species_tree", "locus_model", "evidence_json",
-                  "fasta", "gff", "orthologs", "config", "exon_configurations", "exon_rates", "repertoire_model", "profile_dir", "codon_matrix"):
+                  "fasta", "gff", "orthologs", "config", "exon_configurations", "preparation_summary", "exon_rates", "repertoire_model", "profile_dir", "codon_matrix"):
         value = getattr(args, field, None)
         paths = value if isinstance(value, (list, tuple)) else [value]
         if any(item and Path(item).resolve().is_relative_to(target) for item in paths):
@@ -94,6 +95,8 @@ def command_session(args):
             logger.warning("Coverage subset requested; the threshold has no calibrated biological interpretation")
         if getattr(args, 'command', None) == 'compare-exon-foreground':
             logger.warning("Foreground comparison is conditional composite-likelihood inference; its p-value and confidence-interval calibration are not available")
+        elif getattr(args, 'command', None) == 'calibrate-exon-comparison':
+            logger.warning("Calibration is limited to the declared fixed synthetic catalogue and mask; no p-values or confidence intervals are reported")
         elif getattr(args, 'model', 'parsimony') == 'exon-structure-ctmc':
             logger.warning("Exon-structure estimates are conditional on the mapped finite catalogue and use a composite likelihood for linked local units")
         elif getattr(args, 'model', 'parsimony') in {'er-ard', 'foreground', 'exon-ctmc', 'dna-presence-ctmc', 'intron-position-ctmc'}:

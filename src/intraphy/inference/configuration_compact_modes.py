@@ -8,6 +8,8 @@ from scipy.special import logsumexp
 from .configuration_origin_dp import _checked_product, _subsets
 from .configuration_sparse import _support_after_edge, log_action
 
+ENDPOINT_CATEGORY_MASS_TOLERANCE = 1e-8
+
 
 def _probability(value, label):
     if not np.isfinite(value) or value < -1e-10 or value > 1. + 1e-10:
@@ -59,12 +61,14 @@ def _components(child, inside, edge_outside, node_masks, edge_generator):
 
 def branch_scalars(tree, lengths, inside, edge_outside, node_masks,
                    edge_generator, exon_groups, exon_count,
-                   dna_groups, dna_count, state_exon_counts, block_size, total):
+                   dna_groups, dna_count, joint_groups, joint_count,
+                   state_exon_counts, block_size, total):
     """Marginalize observable branch statistics across origin subsets."""
     output = {}
     maximum_count = int(np.max(state_exon_counts, initial=0))
     for parent, child in tree.edges():
         equal = [0., 0.]
+        equal_joint = 0.
         no_edit = 0.
         can_edit = False
         count_joint = np.zeros((maximum_count + 1, maximum_count + 1))
@@ -75,15 +79,25 @@ def branch_scalars(tree, lengths, inside, edge_outside, node_masks,
                 loga + q.diagonal() * lengths[child] + logb) - total)
             if np.isfinite(no_edit_log):
                 no_edit += math.exp(no_edit_log)
-            for slot, groups, count in ((0, exon_groups, exon_count),
-                                        (1, dna_groups, dna_count)):
+            groupings = [(0, exon_groups, exon_count),
+                         (1, dna_groups, dna_count)]
+            if exon_count > 1 and dna_count > 1:
+                groupings.append((2, joint_groups, joint_count))
+            for slot, groups, count in groupings:
                 for start in range(0, count, block_size):
                     ids = range(start, min(start + block_size, count))
                     acted = action_columns(q, lengths[child],
                                            masked_columns(logb, groups, ids))
                     parent_values = masked_columns(loga, groups, ids)
                     masses = logsumexp(parent_values + acted, axis=0) - total
-                    equal[slot] += float(np.exp(masses[np.isfinite(masses)]).sum())
+                    if np.isnan(masses).any() or np.isposinf(masses).any():
+                        raise ArithmeticError(
+                            "Invalid compact observable endpoint equality mass")
+                    mass = float(np.exp(masses[np.isfinite(masses)]).sum())
+                    if slot == 2:
+                        equal_joint += mass
+                    else:
+                        equal[slot] += mass
             for start in range(0, maximum_count + 1, block_size):
                 child_counts = range(start, min(start + block_size, maximum_count + 1))
                 acted = action_columns(q, lengths[child],
@@ -103,9 +117,27 @@ def branch_scalars(tree, lengths, inside, edge_outside, node_masks,
         count_down = float(np.tril(count_joint, k=-1).sum())
         count_same = float(np.trace(count_joint))
         any_edit = 1. - no_edit if can_edit else 0.
+        if dna_count == 1:
+            equal_joint = equal[0]
+        elif exon_count == 1:
+            equal_joint = equal[1]
+        categories = tuple(_probability(value, label) for value, label in zip((
+            equal_joint, equal[1] - equal_joint, equal[0] - equal_joint,
+            1. - equal[0] - equal[1] + equal_joint), (
+            "neither changed", "exon-only change", "material-only change",
+            "joint change")))
+        category_mass = sum(categories)
+        if abs(category_mass - 1.) > ENDPOINT_CATEGORY_MASS_TOLERANCE:
+            raise ArithmeticError(
+                "Joint endpoint category probabilities do not sum to one "
+                f"within {ENDPOINT_CATEGORY_MASS_TOLERANCE:g}: {category_mass}")
         output[(parent, child)] = {
             "probability_exon_structure_change": _probability(1. - equal[0], "exon change"),
             "probability_dna_presence_change": _probability(1. - equal[1], "DNA change"),
+            "probability_neither_changed": categories[0],
+            "probability_exon_only_changed": categories[1],
+            "probability_material_only_changed": categories[2],
+            "probability_both_changed": categories[3],
             "probability_at_least_one_edit": _probability(any_edit, "any edit"),
             "exon_count_pair_probabilities": count_joint,
             "probability_exon_count_increase": _probability(count_up, "exon-count increase"),

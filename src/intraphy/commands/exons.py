@@ -129,6 +129,8 @@ def add_exon_commands(sub):
                             help="Prepared inputs containing species_tree.tsv.")
     comparison.add_argument("--exon-configurations", nargs="+", required=True,
                             help="One or more JSONL genomic_exon_spans catalogues.")
+    comparison.add_argument("--preparation-summary",
+                            help="Explicit exon_preparation_summary.tsv from the preparation that defined the original family roster.")
     comparison.add_argument("--foreground-branches", required=True,
                             help="TSV selecting canonical tree branches; see docs/cli.md.")
     comparison.add_argument("--output-dir", required=True)

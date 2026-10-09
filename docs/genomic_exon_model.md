@@ -160,7 +160,14 @@ retained; no probability mass cutoff is applied. The
 reported configurations are endpoint net differences and do not estimate the
 number of transitions or a molecular mechanism. DNA-presence probabilities
 cover only material tracts declared in the local catalogue, not all DNA or
-coding sequence.
+coding sequence. Four joint endpoint probabilities partition each branch
+posterior into neither observable changing, exon structure only changing,
+material-tract DNA presence only changing, and both changing. These categories
+are checked to sum to one within an absolute numerical tolerance of 1e-8 and
+are not renormalized. They describe endpoint differences; they do not estimate
+event counts or the order of changes. If a catalogue declares no material
+tracts, its DNA-presence category has no variables to compare. That result does
+not establish DNA invariance across the whole gene.
 
 Likelihood fitting uses the sparse edit generator and exponential-action
 pruning with an exact tree recursion over subsets of declared DNA material
